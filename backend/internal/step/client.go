@@ -361,18 +361,40 @@ func (s *StepClient) RevokeCertificate(serial string) error {
 		return fmt.Errorf("failed to fetch CA root: %w", err)
 	}
 
-	// Any JWK provisioner can revoke any certificate by serial number --
-	// step transparently generates the revocation token from these
-	// provisioner credentials, same as it does for `ca token`. Passing the
-	// password via file (not inline, unlike this function's previous
-	// --password flag) keeps it out of the process list.
-	args := []string{
-		"ca", "revoke",
+	// `step ca revoke` does not accept --provisioner/--provisioner-password-file
+	// itself -- those only belong to `step ca token`. Passing them directly to
+	// revoke doesn't error as an unknown flag; step's parser just doesn't
+	// recognize them for this subcommand and miscounts them as extra
+	// positional arguments ("too many positional arguments were provided").
+	// Revoking by serial number needs a one-time token scoped specifically
+	// for revocation instead, generated the same way IssueCertificate and
+	// SignCSR generate their issuance tokens above.
+	tokenArgs := []string{
+		"ca", "token",
 		serial,
+		"--revoke",
 		"--ca-url", s.CAURL,
 		"--root", rootPath,
 		"--provisioner", s.ProvisionerName,
 		"--provisioner-password-file", passwordFile,
+	}
+
+	tokenOutput, err := runCommand("step", tokenArgs...)
+	if err != nil {
+		return fmt.Errorf("failed to generate revocation token: %w", err)
+	}
+
+	token, err := extractJWTToken(tokenOutput)
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		"ca", "revoke",
+		serial,
+		"--token", token,
+		"--ca-url", s.CAURL,
+		"--root", rootPath,
 	}
 
 	if _, err := runCommand("step", args...); err != nil {
