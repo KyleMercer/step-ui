@@ -66,6 +66,8 @@ PROVISIONER_PASSWORD=your_provisioner_password
 
 `NEXT_PUBLIC_API_URL` (in `docker-compose.yml`/`.env`) controls the backend URL the browser talks to. It behaves like a normal runtime environment variable: change it and recreate the frontend container (`docker compose up -d`, or Dockhand's "save and redeploy"/"force recreate") -- no image rebuild needed. Under the hood the value still gets substituted into the compiled frontend at container start (`frontend/docker-entrypoint.sh`), because Next.js normally bakes `NEXT_PUBLIC_*` variables into the JS bundle at build time and would otherwise ignore anything set afterwards.
 
+Make sure `NEXT_PUBLIC_API_URL` is actually set in your `.env` file (or Dockhand's own env var UI) -- `docker-compose.yml` references it as plain `${NEXT_PUBLIC_API_URL}` with no compose-level default, since some Docker management UIs (Dockhand included) don't support the `${VAR:-default}` bash-style fallback syntax in their own variable fields. If it's ever left unset, the entrypoint script fails safe rather than breaking the container: it logs a warning and leaves the frontend serving its build-time placeholder instead of guessing at a value.
+
 ### 4. Setup Step-CA Provisioner (if not already done)
 
 If you haven't created a provisioner for the UI yet, run this on your Step-CA server:
