@@ -65,12 +65,10 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		return
 	}
 
-	log.Printf("DEBUG [Handler]: IssueCertificate handler called with CN=%s\n", req.CN)
-	
 	// Generate certificate using step CLI
 	bundle, err := h.stepClient.IssueCertificate(req.CN, req.SANs, req.NotAfterDays)
 	if err != nil {
-		log.Printf("DEBUG [Handler]: IssueCertificate returned error: %v\n", err)
+		log.Printf("IssueCertificate failed for CN=%s: %v", req.CN, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to issue certificate: %v", err)})
 		return
 	}
@@ -84,6 +82,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		ID:          certID,
 		CN:          req.CN,
 		SANs:        string(sansJSON),
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
@@ -130,8 +129,8 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"certificate": response,
 		"download": gin.H{
-			"data":     downloadData,
-			"filename": fmt.Sprintf("%s-cert-bundle.zip", req.CN),
+			"data":      downloadData,
+			"filename":  fmt.Sprintf("%s-cert-bundle.zip", req.CN),
 			"mime_type": "application/zip",
 		},
 	})
@@ -155,9 +154,10 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 	// Generate unique ID for the certificate
 	certID := uuid.New().String()
 
-	// Parse CSR to extract CN and SANs (simplified - in real implementation, parse CSR)
-	cn := "unknown" // Would need to parse CSR properly
-	sans := []string{}
+	// CN and SANs come from the CSR itself (parsed and signature-verified in
+	// StepClient.SignCSR) rather than being hardcoded as "unknown".
+	cn := bundle.CN
+	sans := bundle.SANs
 
 	// Store certificate metadata in database
 	sansJSON, _ := json.Marshal(sans)
@@ -165,6 +165,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 		ID:          certID,
 		CN:          cn,
 		SANs:        string(sansJSON),
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "csr",
@@ -237,7 +238,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 	for _, cert := range certs {
 		var sans []string
 		json.Unmarshal([]byte(cert.SANs), &sans)
-		
+
 		responses = append(responses, CertResponse{
 			ID:          cert.ID,
 			CN:          cert.CN,
@@ -256,7 +257,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 // GetCertificate returns a specific certificate
 func (h *Handlers) GetCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
@@ -265,7 +266,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 
 	var sans []string
 	json.Unmarshal([]byte(cert.SANs), &sans)
-	
+
 	response := CertResponse{
 		ID:          cert.ID,
 		CN:          cert.CN,
@@ -283,7 +284,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 // RenewCertificate renews a certificate
 func (h *Handlers) RenewCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	// Get existing certificate
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
@@ -323,7 +324,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 	// Return new certificate info
 	var responseSans []string
 	json.Unmarshal([]byte(cert.SANs), &responseSans)
-	
+
 	response := CertResponse{
 		ID:          cert.ID,
 		CN:          cert.CN,
@@ -341,7 +342,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 // RevokeCertificate revokes a certificate
 func (h *Handlers) RevokeCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	// Get certificate
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
@@ -349,12 +350,23 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 		return
 	}
 
-	// Revoke using step CLI (would need serial number)
-	// For now, just mark as revoked in database
+	// Actually revoke with the CA -- this used to only flip the local status
+	// flag, which meant a "revoked" certificate here was still perfectly
+	// valid as far as step-ca was concerned.
+	if err := h.stepClient.RevokeCertificate(cert.Serial); err != nil {
+		log.Printf("RevokeCertificate failed for cert %s (serial=%s): %v", certID, cert.Serial, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to revoke certificate with CA: %v", err)})
+		return
+	}
+
 	cert.Status = "revoked"
 	cert.UpdatedAt = time.Now()
 	if err := h.db.UpdateCertificate(cert); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke certificate"})
+		// The CA-side revoke already succeeded at this point; the cert IS
+		// revoked, we just failed to record that locally. Surface this
+		// distinctly so an operator doesn't think the revoke itself failed
+		// and try again (which is harmless against step-ca, but confusing).
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Certificate was revoked with the CA, but failed to update local status"})
 		return
 	}
 
@@ -373,10 +385,9 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 
 // GetCASettings returns CA configuration
 func (h *Handlers) GetCASettings(c *gin.Context) {
-	// This would typically read from configuration
 	settings := gin.H{
 		"ca_url":           h.stepClient.CAURL,
-		"root_fingerprint": "TODO: Calculate from CA root",
+		"root_fingerprint": h.stepClient.CARootFingerprint,
 		"acme_directories": []string{
 			h.stepClient.CAURL + "/acme/acme/directory",
 		},
@@ -385,14 +396,12 @@ func (h *Handlers) GetCASettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
-// Health check endpoint  
+// Health check endpoint
 func (h *Handlers) Health(c *gin.Context) {
-	// NEW VERSION WITH ROOT FINGERPRINT SUPPORT
-	fmt.Println("=== HEALTH ENDPOINT HIT ===")
 	response := map[string]interface{}{
-		"status":    "healthy-NEW",
-		"timestamp": time.Now().Format(time.RFC3339),
-		"fingerprint_length": len(h.stepClient.CARootFingerprint),
+		"status":                         "healthy",
+		"timestamp":                      time.Now().Format(time.RFC3339),
+		"ca_root_fingerprint_configured": h.stepClient.CARootFingerprint != "",
 	}
 	c.JSON(http.StatusOK, response)
 }

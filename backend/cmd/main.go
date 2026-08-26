@@ -21,13 +21,9 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
-	
-	// DEBUG: Print configuration at startup
-	log.Printf("=== CONFIGURATION ===")
-	log.Printf("CA_URL: %s", cfg.CAURL)
-	log.Printf("CA_ROOT_FINGERPRINT: %s", cfg.CARootFingerprint)
-	log.Printf("PROVISIONER_NAME: %s", cfg.ProvisionerName)
-	log.Printf("====================")
+
+	log.Printf("Starting with CA_URL=%s, PROVISIONER_NAME=%s, CA root fingerprint configured=%t",
+		cfg.CAURL, cfg.ProvisionerName, cfg.CARootFingerprint != "")
 
 	// Initialize database
 	database, err := db.NewDatabase(cfg.DBPath)
@@ -42,8 +38,6 @@ func main() {
 		cfg.ProvisionerName,
 		cfg.ProvisionerPassword,
 	)
-	
-	log.Printf("StepClient initialized with fingerprint: %s", stepClient.CARootFingerprint)
 
 	// Initialize handlers
 	handlers := api.NewHandlers(database, stepClient)
