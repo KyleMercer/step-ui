@@ -54,6 +54,10 @@ CA_URL=https://ca.home:9000
 CA_ROOT_FINGERPRINT=your_root_fingerprint_here
 PROVISIONER_NAME=ui-admin
 PROVISIONER_PASSWORD=your_provisioner_password
+
+# Optional but recommended -- see Security Notes below
+API_AUTH_TOKEN=
+NEXT_PUBLIC_API_AUTH_TOKEN=
 ```
 
 **Important:** Replace the values with your actual Step-CA details:
@@ -61,6 +65,9 @@ PROVISIONER_PASSWORD=your_provisioner_password
 - `CA_ROOT_FINGERPRINT`: The fingerprint you obtained in step 1
 - `PROVISIONER_NAME`: Your provisioner name
 - `PROVISIONER_PASSWORD`: Your provisioner password
+- `API_AUTH_TOKEN` / `NEXT_PUBLIC_API_AUTH_TOKEN`: set both to the same
+  value (e.g. output of `openssl rand -hex 32`) to require a bearer token
+  on the API; see Security Notes
 
 ### 3. Setup Step-CA Provisioner (if not already done)
 
@@ -164,7 +171,18 @@ npm run dev
 - The provisioner password is sensitive - protect it appropriately
 - Consider using Docker secrets for production deployments
 - Enable TLS for the backend API in production
-- Implement proper authentication and authorization for production use
+- Set `API_AUTH_TOKEN` (and matching `NEXT_PUBLIC_API_AUTH_TOKEN`) in
+  `.env` if this is reachable beyond localhost. Without it, anyone who can
+  reach the backend port can issue, sign, and revoke certificates with no
+  access control at all. This is a shared secret between the frontend and
+  backend containers, not full user authentication -- it's shipped in the
+  frontend's client-side JS bundle, so treat it accordingly. See the
+  comments in `example.env` for details and generating a token.
+- `CORS_ALLOWED_ORIGIN` restricts which origin the backend accepts
+  browser requests from (defaults to `http://localhost:3000`). Set it if
+  you access the frontend at a different host/port.
+- Implement proper multi-user authentication and authorization if this
+  needs to support more than one trusted operator
 
 ## License
 

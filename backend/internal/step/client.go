@@ -14,13 +14,13 @@ import (
 )
 
 type CertBundle struct {
-	CertPEM     []byte
-	KeyPEM      []byte
-	ChainPEM    []byte
+	CertPEM      []byte
+	KeyPEM       []byte
+	ChainPEM     []byte
 	FullChainPEM []byte
-	PFXData     []byte
-	Serial      string
-	NotAfter    time.Time
+	PFXData      []byte
+	Serial       string
+	NotAfter     time.Time
 }
 
 type StepClient struct {
@@ -42,7 +42,7 @@ func NewStepClient(caURL, caRootFingerprint, provisionerName, provisionerPasswor
 func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int) (*CertBundle, error) {
 	log.Printf("DEBUG: IssueCertificate called with cn=%s, sans=%v, notAfterDays=%d\n", cn, sans, notAfterDays)
 	log.Printf("DEBUG: StepClient.CARootFingerprint='%s'\n", s.CARootFingerprint)
-	
+
 	// Create temporary directory for certificate files
 	tempDir, err := os.MkdirTemp("", "step-cert-*")
 	if err != nil {
@@ -117,12 +117,12 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 			break
 		}
 	}
-	
+
 	if token == "" {
 		log.Printf("DEBUG: Could not extract token from output: %s\n", string(tokenOutput))
 		return nil, fmt.Errorf("failed to extract JWT token from step ca token output")
 	}
-	
+
 	log.Printf("DEBUG: Extracted token (first 20 chars): %s...\n", token[:min(20, len(token))])
 
 	// Now use the token to issue certificate
@@ -358,7 +358,7 @@ func (s *StepClient) getChain(certPath string) ([]byte, error) {
 	// The step ca certificate command already provides the certificate
 	// We need to get the CA chain (intermediate + root)
 	// Download the root certificate using step ca root
-	
+
 	tempDir, err := os.MkdirTemp("", "step-chain-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
@@ -458,7 +458,7 @@ func (s *StepClient) CreateDownloadBundle(bundle *CertBundle, format string, pfx
 	}
 
 	// Add README with installation instructions
-	readme := s.generateReadme(format, pfxPassword)
+	readme := s.generateReadme(format)
 	if err := s.addFileToZip(zipWriter, "README.txt", []byte(readme)); err != nil {
 		return nil, err
 	}
@@ -479,7 +479,7 @@ func (s *StepClient) addFileToZip(zipWriter *zip.Writer, filename string, data [
 	return err
 }
 
-func (s *StepClient) generateReadme(format, pfxPassword string) string {
+func (s *StepClient) generateReadme(format string) string {
 	readme := "# Certificate Installation Instructions\n\n"
 	readme += "## Files in this bundle:\n"
 	readme += "- cert.pem: Your certificate\n"
@@ -488,7 +488,12 @@ func (s *StepClient) generateReadme(format, pfxPassword string) string {
 	readme += "- privkey.pem: Private key (keep this secure!)\n"
 
 	if format == "pfx" {
-		readme += "- cert.p12: PFX/PKCS#12 bundle (password: " + pfxPassword + ")\n"
+		// Deliberately NOT printing pfxPassword here: it used to be written
+		// in plaintext into this README, bundled in the very same zip as
+		// the password-protected cert.p12 -- which defeats the point of
+		// protecting the PFX with a password at all, since anyone who gets
+		// the zip gets both.
+		readme += "- cert.p12: PFX/PKCS#12 bundle (password: set on the issue/download form -- not stored in this bundle; check the UI or your password manager)\n"
 	}
 
 	readme += "\n## Installation Instructions\n\n"

@@ -11,6 +11,8 @@ services:
       - DB_PATH=/app/data/certs.db
       - PORT=8080
       - STEPPATH=/tmp/step-nonexistent
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN:-}
+      - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -21,6 +23,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_AUTH_TOKEN=${API_AUTH_TOKEN:-}
     depends_on:
       - backend
     restart: unless-stopped
