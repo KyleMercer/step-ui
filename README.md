@@ -62,7 +62,11 @@ PROVISIONER_PASSWORD=your_provisioner_password
 - `PROVISIONER_NAME`: Your provisioner name
 - `PROVISIONER_PASSWORD`: Your provisioner password
 
-### 3. Setup Step-CA Provisioner (if not already done)
+### 3. Frontend API URL
+
+`NEXT_PUBLIC_API_URL` (in `docker-compose.yml`/`.env`) controls the backend URL the browser talks to. It behaves like a normal runtime environment variable: change it and recreate the frontend container (`docker compose up -d`, or Dockhand's "save and redeploy"/"force recreate") -- no image rebuild needed. Under the hood the value still gets substituted into the compiled frontend at container start (`frontend/docker-entrypoint.sh`), because Next.js normally bakes `NEXT_PUBLIC_*` variables into the JS bundle at build time and would otherwise ignore anything set afterwards.
+
+### 4. Setup Step-CA Provisioner (if not already done)
 
 If you haven't created a provisioner for the UI yet, run this on your Step-CA server:
 
@@ -133,6 +137,10 @@ This error means the `CA_ROOT_FINGERPRINT` is missing or incorrect in your `.env
 - Verify your provisioner name and password are correct
 - Ensure the provisioner exists on your Step-CA server
 - Check the provisioner hasn't been disabled
+
+### The UI keeps calling the wrong backend URL after changing NEXT_PUBLIC_API_URL
+
+If a plain restart or redeploy doesn't pick up a new `NEXT_PUBLIC_API_URL`, the frontend image predates the runtime-substitution fix described above and still bakes the value in at build time. Rebuild the frontend image once (`docker compose build frontend`, or Dockhand's "build images" rather than "save and redeploy" -- the latter recreates the container from the existing image without rerunning the build, so it can't pick up a value that's compiled into the JS). After that one rebuild, changing `NEXT_PUBLIC_API_URL` and recreating the container is enough going forward.
 
 ## Development
 
