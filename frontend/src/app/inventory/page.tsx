@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { certificateApi, Certificate } from '@/lib/api'
-import { formatDate, getDaysUntilExpiry, getExpiryStatus } from '@/lib/utils'
+import { formatDate, getDaysUntilExpiry, getExpiryStatus, downloadBase64File } from '@/lib/utils'
 import { Shield, AlertTriangle, CheckCircle, Clock, Search, Filter, Download, RotateCcw, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
@@ -31,9 +31,20 @@ export default function Inventory() {
   }
 
   const handleRenew = async (cert: Certificate) => {
+    if (
+      !confirm(
+        `Renewing ${cert.cn} issues a brand new certificate and private key -- the old one still exists at the CA until it expires or is separately revoked. The new cert/key will download immediately; there is no way to get it again later. Continue?`
+      )
+    ) {
+      return
+    }
+
     try {
-      await certificateApi.renewCertificate(cert.id)
-      toast.success('Certificate renewed successfully!')
+      const response = await certificateApi.renewCertificate(cert.id)
+      if (response.download) {
+        downloadBase64File(response.download.data, response.download.filename, response.download.mime_type)
+      }
+      toast.success('Certificate renewed -- new cert/key downloaded')
       loadCertificates()
     } catch (error: any) {
       console.error('Failed to renew certificate:', error)
