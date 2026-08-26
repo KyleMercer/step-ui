@@ -4,12 +4,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(r *gin.Engine, handlers *Handlers) {
-	// Health check
+// SetupRoutes wires up the routes. authToken is applied to every /api/*
+// route via RequireBearerToken -- /health is deliberately left open so
+// container/orchestrator healthchecks don't need the token. Pass "" to
+// leave the API unauthenticated (the default; see API_AUTH_TOKEN in
+// example.env).
+func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string) {
+	// Health check (intentionally not behind auth)
 	r.GET("/health", handlers.Health)
 
 	// API routes
 	api := r.Group("/api")
+	api.Use(RequireBearerToken(authToken))
 	{
 		// Certificate operations
 		api.POST("/certs/issue", handlers.IssueCertificate)
