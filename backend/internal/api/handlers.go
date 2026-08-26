@@ -296,14 +296,25 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 	var sans []string
 	json.Unmarshal([]byte(cert.SANs), &sans)
 
-	// Issue new certificate with same CN and SANs
+	// Renewing means issuing a brand new certificate (new key pair, new
+	// serial) with the same CN/SANs -- step-ca certificates are immutable
+	// once issued, so there's no operation that extends an existing one's
+	// expiry in place. That new cert/key only exists in memory at this
+	// point (IssueCertificate's temp files are already gone by the time it
+	// returns), so it MUST be handed back in this response now or it's
+	// lost forever -- there is no later endpoint that can recover it.
 	bundle, err := h.stepClient.IssueCertificate(cert.CN, sans, 90) // Default 90 days
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to renew certificate: %v", err)})
 		return
 	}
 
-	// Update certificate in database
+	// Update certificate in database. The old serial number now belongs to
+	// a different, still-valid certificate that this record no longer
+	// represents -- if Serial isn't updated too, revoking "this" cert
+	// later would revoke the previous (now-superseded) one instead of the
+	// new one actually in use.
+	cert.Serial = bundle.Serial
 	cert.NotAfter = bundle.NotAfter
 	cert.UpdatedAt = time.Now()
 	if err := h.db.UpdateCertificate(cert); err != nil {
@@ -316,10 +327,18 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		CertID:    certID,
 		Who:       "system",
 		Action:    "renewed",
-		Details:   fmt.Sprintf("CN: %s", cert.CN),
+		Details:   fmt.Sprintf("CN: %s, new serial: %s", cert.CN, bundle.Serial),
 		Timestamp: time.Now(),
 	}
 	h.db.LogAuditEvent(auditEvent)
+
+	// Build the same PEM-format download bundle Issue returns, so the new
+	// key material actually reaches the caller instead of being discarded.
+	downloadData, err := h.stepClient.CreateDownloadBundle(bundle, "", "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create download bundle"})
+		return
+	}
 
 	// Return new certificate info
 	var responseSans []string
@@ -336,7 +355,14 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		UpdatedAt:   cert.UpdatedAt,
 	}
 
-	c.JSON(http.StatusOK, gin.H{"certificate": response})
+	c.JSON(http.StatusOK, gin.H{
+		"certificate": response,
+		"download": gin.H{
+			"data":      downloadData,
+			"filename":  fmt.Sprintf("%s-cert-bundle.zip", cert.CN),
+			"mime_type": "application/zip",
+		},
+	})
 }
 
 // RevokeCertificate revokes a certificate
