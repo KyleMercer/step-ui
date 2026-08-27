@@ -22,6 +22,19 @@ COPY . .
 # working as a normal environment variable set in docker-compose.yml.
 ENV NEXT_PUBLIC_API_URL=__RUNTIME_NEXT_PUBLIC_API_URL__
 
+# Unlike API_URL above, version/commit/build-date genuinely are build-time
+# constants -- a rebuild is required to change them anyway -- so these get
+# the real values directly, no placeholder/runtime-substitution dance
+# needed. The footer shows the version alone; the Settings page's System
+# Information section shows the full set, alongside the backend's own
+# /api/version response.
+ARG APP_VERSION=unknown
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
+ENV NEXT_PUBLIC_APP_COMMIT=${GIT_SHA}
+ENV NEXT_PUBLIC_APP_BUILD_DATE=${BUILD_DATE}
+
 # Build the application
 RUN npm run build
 

@@ -25,6 +25,7 @@ lerna-debug.log*
 out/
 build/
 dist/
+tsconfig.tsbuildinfo
 .vercel
 .turbo
 next-env.d.ts

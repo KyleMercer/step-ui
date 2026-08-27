@@ -110,5 +110,16 @@ LABEL org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.title="step-ui-backend"
 
+# LABELs above are image metadata only -- not visible to the running process
+# itself. Also bake the same three values in as real ENV vars so the app can
+# read them back at runtime (os.Getenv) and serve them from /api/version --
+# this is what lets the web UI show its own build identity instead of
+# requiring `docker inspect`. Unlike frontend's NEXT_PUBLIC_API_URL, these
+# never need to change without a rebuild, so a plain build-time ENV bake is
+# enough -- no entrypoint substitution required.
+ENV APP_VERSION=${APP_VERSION}
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_DATE=${BUILD_DATE}
+
 # Run the application
 CMD ["./main"]

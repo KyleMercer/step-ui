@@ -21,5 +21,8 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers) {
 
 		// Settings
 		api.GET("/settings/ca", handlers.GetCASettings)
+
+		// Build identity (version, commit, build date) for the UI footer
+		api.GET("/version", handlers.Version)
 	}
 }

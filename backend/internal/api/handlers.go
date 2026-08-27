@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -430,4 +432,27 @@ func (h *Handlers) Health(c *gin.Context) {
 		"ca_root_fingerprint_configured": h.stepClient.CARootFingerprint != "",
 	}
 	c.JSON(http.StatusOK, response)
+}
+
+// envOrUnknown reads a build-identity env var, falling back to "unknown"
+// for images built without ./build.sh (a plain `docker compose build`
+// leaves these ARGs at their Dockerfile defaults).
+func envOrUnknown(name string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return "unknown"
+}
+
+// Version reports this build's identity (VERSION file contents, git
+// commit, build timestamp), baked in as env vars at image build time by
+// build.sh. Lets the frontend show "what am I actually running" without
+// anyone needing to `docker inspect` the container by hand.
+func (h *Handlers) Version(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"version":    envOrUnknown("APP_VERSION"),
+		"commit":     envOrUnknown("GIT_SHA"),
+		"build_date": envOrUnknown("BUILD_DATE"),
+		"go_version": runtime.Version(),
+	})
 }

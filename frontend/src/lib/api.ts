@@ -45,6 +45,21 @@ export interface CASettings {
   acme_directories: string[]
 }
 
+export interface VersionInfo {
+  version: string
+  commit: string
+  build_date: string
+  go_version?: string
+}
+
+export interface FrontendSystemInfo {
+  version: string
+  commit: string
+  build_date: string
+  node_version: string
+  next_version: string
+}
+
 export const certificateApi = {
   // Issue a new certificate
   issueCertificate: async (data: IssueRequest) => {
@@ -97,6 +112,25 @@ export const certificateApi = {
     const response = await api.get('/health')
     return response.data
   },
+
+  // Backend build identity (version, commit, build date, Go version)
+  getVersion: async (): Promise<VersionInfo> => {
+    const response = await api.get('/api/version')
+    return response.data
+  },
+}
+
+// Frontend's own build identity, served by this Next.js app itself (not the
+// Go backend) -- a plain same-origin fetch, deliberately NOT routed through
+// the `api` axios instance above, since that instance's baseURL points at
+// NEXT_PUBLIC_API_URL (the backend). This hits the frontend server's own
+// /api/system-info route instead.
+export const getFrontendSystemInfo = async (): Promise<FrontendSystemInfo> => {
+  const response = await fetch('/api/system-info')
+  if (!response.ok) {
+    throw new Error(`system-info request failed: ${response.status}`)
+  }
+  return response.json()
 }
 
 export default api

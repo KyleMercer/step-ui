@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { certificateApi, CASettings } from '@/lib/api'
+import { certificateApi, getFrontendSystemInfo, CASettings, VersionInfo, FrontendSystemInfo } from '@/lib/api'
 import { Shield, Copy, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
@@ -9,6 +9,10 @@ import Link from 'next/link'
 export default function Settings() {
   const [settings, setSettings] = useState<CASettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [backendInfo, setBackendInfo] = useState<VersionInfo | null>(null)
+  const [backendInfoError, setBackendInfoError] = useState(false)
+  const [frontendInfo, setFrontendInfo] = useState<FrontendSystemInfo | null>(null)
+  const [frontendInfoError, setFrontendInfoError] = useState(false)
 
   const loadSettings = async () => {
     try {
@@ -22,8 +26,25 @@ export default function Settings() {
     }
   }
 
+  const loadSystemInfo = async () => {
+    try {
+      setFrontendInfo(await getFrontendSystemInfo())
+    } catch (error) {
+      console.error('Failed to load frontend system info:', error)
+      setFrontendInfoError(true)
+    }
+
+    try {
+      setBackendInfo(await certificateApi.getVersion())
+    } catch (error) {
+      console.error('Failed to load backend version:', error)
+      setBackendInfoError(true)
+    }
+  }
+
   useEffect(() => {
     loadSettings()
+    loadSystemInfo()
   }, [])
 
   const copyToClipboard = (text: string) => {
@@ -266,6 +287,56 @@ openssl x509 -in certificate.pem -text -noout`}
                   <Copy className="h-4 w-4 mr-1" />
                   Copy Commands
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* System Information */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">System Information</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Exactly what&apos;s running right now -- useful when more than one build, stack, or
+                Docker UI is in the picture. The footer on every page shows just the version number;
+                this is the full detail.
+              </p>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Frontend</h3>
+                <div className="bg-gray-50 rounded-md p-4 text-sm text-gray-700 space-y-1 font-mono">
+                  {frontendInfo ? (
+                    <>
+                      <div>version: {frontendInfo.version}</div>
+                      <div>commit: {frontendInfo.commit}</div>
+                      <div>built: {frontendInfo.build_date}</div>
+                      <div>node: {frontendInfo.node_version}</div>
+                      <div>next.js: {frontendInfo.next_version}</div>
+                    </>
+                  ) : (
+                    <div className="text-gray-400">
+                      {frontendInfoError ? 'Unavailable' : 'Loading…'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Backend</h3>
+                <div className="bg-gray-50 rounded-md p-4 text-sm text-gray-700 space-y-1 font-mono">
+                  {backendInfo ? (
+                    <>
+                      <div>version: {backendInfo.version}</div>
+                      <div>commit: {backendInfo.commit}</div>
+                      <div>built: {backendInfo.build_date}</div>
+                      <div>go: {backendInfo.go_version}</div>
+                    </>
+                  ) : (
+                    <div className="text-gray-400">
+                      {backendInfoError ? 'Unavailable' : 'Loading…'}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

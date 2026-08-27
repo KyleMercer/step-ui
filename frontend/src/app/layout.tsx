@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import Navigation from './navigation'
+import Footer from './footer'
 
 // Deliberately using the system font stack (via Tailwind's default font-sans)
 // instead of next/font/google's Inter. next/font/google fetches font metadata
@@ -20,9 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-sans">
+      <body className="font-sans flex flex-col min-h-screen">
         <Navigation />
-        {children}
+        <div className="flex-1">{children}</div>
+        <Footer />
         <Toaster position="top-right" />
       </body>
     </html>
