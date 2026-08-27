@@ -97,6 +97,16 @@ docker compose up -d
 
 4. Access the web interface at `http://localhost:3000`
 
+## Build Versioning
+
+Both images are tagged with a build identity so you can always tell exactly what's running -- useful once you have several local builds, stacks, or Dockhand/Portainer instances in play at once and want to be sure the image you're looking at is the one you think it is.
+
+- `VERSION` at the repo root is the single source of truth for a human-meaningful build number. Bump it yourself whenever you want to mark a new build (a plain integer, like a firmware revision counter, is enough -- it doesn't need to follow any particular scheme).
+- `./build.sh` builds both images via `docker compose build --no-cache --progress=plain`, reading `VERSION` plus the current git commit and build timestamp, and passing all three through to both Dockerfiles as build args. It also saves the full unfolded build log to a timestamped file so nothing scrolls by unseen.
+- Both Dockerfiles print the version/commit/date early in the build (visible in the log) and bake them into the image as standard OCI labels (`org.opencontainers.image.version`, `.revision`, `.created`). Docker UIs that read image labels -- Portainer confirmed, likely Dockhand too -- will surface these directly; otherwise `docker inspect <container-or-image> --format '{{json .Config.Labels}}'` always shows the truth regardless of what tag the image happens to be under.
+
+If you build with plain `docker compose build` instead of `./build.sh`, these all default to `unknown` rather than silently showing stale or misleading info.
+
 ## Usage
 
 ### Issue a Certificate
