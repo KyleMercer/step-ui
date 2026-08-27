@@ -13,6 +13,7 @@ export interface Certificate {
   id: string
   cn: string
   sans: string[]
+  serial: string
   not_after: string
   status: string
   key_strategy: string

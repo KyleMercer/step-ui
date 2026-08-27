@@ -46,6 +46,7 @@ type CertResponse struct {
 	ID          string    `json:"id"`
 	CN          string    `json:"cn"`
 	SANs        []string  `json:"sans"`
+	Serial      string    `json:"serial"`
 	NotAfter    time.Time `json:"not_after"`
 	Status      string    `json:"status"`
 	KeyStrategy string    `json:"key_strategy"`
@@ -121,6 +122,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		ID:          certID,
 		CN:          req.CN,
 		SANs:        req.SANs,
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
@@ -197,6 +199,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 		ID:          certID,
 		CN:          cn,
 		SANs:        sans,
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "csr",
@@ -245,6 +248,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 			ID:          cert.ID,
 			CN:          cert.CN,
 			SANs:        sans,
+			Serial:      cert.Serial,
 			NotAfter:    cert.NotAfter,
 			Status:      cert.Status,
 			KeyStrategy: cert.KeyStrategy,
@@ -273,6 +277,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 		ID:          cert.ID,
 		CN:          cert.CN,
 		SANs:        sans,
+		Serial:      cert.Serial,
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,
@@ -350,6 +355,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		ID:          cert.ID,
 		CN:          cert.CN,
 		SANs:        responseSans,
+		Serial:      cert.Serial,
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { certificateApi, Certificate } from '@/lib/api'
 import { formatDate, getDaysUntilExpiry, getExpiryStatus, downloadBase64File } from '@/lib/utils'
-import { Shield, AlertTriangle, CheckCircle, Clock, Search, Filter, Download, RotateCcw, X } from 'lucide-react'
+import { Shield, AlertTriangle, CheckCircle, Clock, Search, Filter, Download, RotateCcw, X, Copy } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 
@@ -65,6 +65,11 @@ export default function Inventory() {
       console.error('Failed to revoke certificate:', error)
       toast.error(error.response?.data?.error || 'Failed to revoke certificate')
     }
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success('Copied to clipboard!')
   }
 
   const getStatusIcon = (status: string) => {
@@ -305,6 +310,19 @@ export default function Inventory() {
                       </ul>
                     </div>
                   )}
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Serial Number</label>
+                    <div className="flex items-center">
+                      <p className="text-sm text-gray-900 font-mono break-all">{selectedCert.serial}</p>
+                      <button
+                        onClick={() => copyToClipboard(selectedCert.serial)}
+                        className="ml-2 flex-shrink-0 text-gray-400 hover:text-gray-600"
+                        title="Copy serial number"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">Status</label>
                     <p className="text-sm text-gray-900 capitalize">{selectedCert.status}</p>
