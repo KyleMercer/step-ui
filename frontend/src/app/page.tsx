@@ -16,10 +16,6 @@ export default function Dashboard() {
     active: 0,
   })
 
-  useEffect(() => {
-    loadCertificates()
-  }, [])
-
   const loadCertificates = async () => {
     try {
       const response = await certificateApi.listCertificates({ limit: 100 })
@@ -52,6 +48,10 @@ export default function Dashboard() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadCertificates()
+  }, [])
 
   const getStatusIcon = (status: string) => {
     switch (status) {

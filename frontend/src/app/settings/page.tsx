@@ -10,10 +10,6 @@ export default function Settings() {
   const [settings, setSettings] = useState<CASettings | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
   const loadSettings = async () => {
     try {
       const response = await certificateApi.getCASettings()
@@ -25,6 +21,10 @@ export default function Settings() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadSettings()
+  }, [])
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -231,9 +231,9 @@ security find-certificate -a -c "Your CA Name" /Library/Keychains/System.keychai
                   <ol className="text-sm text-gray-800 space-y-2">
                     <li>1. Download the root CA certificate to your device</li>
                     <li>2. Go to Settings → Security → Encryption & credentials</li>
-                    <li>3. Tap "Install a certificate" → "CA certificate"</li>
+                    <li>3. Tap &quot;Install a certificate&quot; → &quot;CA certificate&quot;</li>
                     <li>4. Select the downloaded .pem file</li>
-                    <li>5. Give the certificate a name and tap "OK"</li>
+                    <li>5. Give the certificate a name and tap &quot;OK&quot;</li>
                     <li>6. The certificate is now trusted for all apps</li>
                   </ol>
                 </div>

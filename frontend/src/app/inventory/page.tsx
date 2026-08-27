@@ -14,10 +14,6 @@ export default function Inventory() {
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null)
 
-  useEffect(() => {
-    loadCertificates()
-  }, [])
-
   const loadCertificates = async () => {
     try {
       const response = await certificateApi.listCertificates({ limit: 1000 })
@@ -29,6 +25,10 @@ export default function Inventory() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadCertificates()
+  }, [])
 
   const handleRenew = async (cert: Certificate) => {
     if (

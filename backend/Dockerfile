@@ -1,4 +1,4 @@
-FROM golang:1.21-bullseye AS builder
+FROM golang:1.24-bookworm AS builder
 
 # Pin the Smallstep CLI to a specific, checksummed release instead of
 # "latest" -- unpinned "latest" downloads aren't reproducible (a rebuild next
@@ -48,7 +48,7 @@ RUN go mod tidy
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main ./cmd
 
 # Final stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 ARG STEP_CLI_VERSION=0.30.6
 ARG TARGETARCH
@@ -88,6 +88,10 @@ USER appuser
 
 # Expose port
 EXPOSE 8080
+
+# Basic container healthcheck (also surfaced by Docker UIs like Dockhand)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://localhost:8080/health || exit 1
 
 # Run the application
 CMD ["./main"]
