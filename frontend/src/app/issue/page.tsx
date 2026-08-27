@@ -1,12 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { certificateApi, IssueRequest } from '@/lib/api'
 import { Shield, Download, AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { downloadBase64File } from '@/lib/utils'
 import Link from 'next/link'
+
+const UNDOWNLOADED_WARNING =
+  "You haven't downloaded the certificate bundle yet. This is the only copy of the private key -- once you leave this page, it cannot be retrieved again. Leave anyway?"
 
 interface FormData {
   cn: string
@@ -23,6 +26,24 @@ export default function IssueCertificate() {
     filename: string
     mime_type: string
   } | null>(null)
+  const [hasDownloaded, setHasDownloaded] = useState(false)
+
+  // Catches a tab close, refresh, or typed-URL navigation while the newly
+  // issued private key hasn't been downloaded yet -- this is the only copy,
+  // the backend never stores it. Browsers show their own generic wording
+  // for this prompt (customizing returnValue is no longer honored), but the
+  // prompt itself still appears.
+  useEffect(() => {
+    if (!downloadData || hasDownloaded) return
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [downloadData, hasDownloaded])
 
   const {
     register,
@@ -71,6 +92,15 @@ export default function IssueCertificate() {
   const handleDownload = () => {
     if (downloadData) {
       downloadBase64File(downloadData.data, downloadData.filename, downloadData.mime_type)
+      setHasDownloaded(true)
+    }
+  }
+
+  // Guards the in-app nav links below (Next.js client-side routing doesn't
+  // trigger beforeunload, so this covers "Back to Dashboard" / "Cancel").
+  const confirmLeaveIfUndownloaded = (e: React.MouseEvent) => {
+    if (downloadData && !hasDownloaded && !confirm(UNDOWNLOADED_WARNING)) {
+      e.preventDefault()
     }
   }
 
@@ -82,6 +112,7 @@ export default function IssueCertificate() {
           <div className="flex items-center">
             <Link
               href="/"
+              onClick={confirmLeaveIfUndownloaded}
               className="text-blue-600 hover:text-blue-500 text-sm font-medium"
             >
               ← Back to Dashboard
@@ -192,6 +223,7 @@ export default function IssueCertificate() {
             <div className="flex justify-end space-x-3">
               <Link
                 href="/"
+                onClick={confirmLeaveIfUndownloaded}
                 className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
                 Cancel
@@ -228,6 +260,21 @@ export default function IssueCertificate() {
                 Download Certificate Bundle
               </button>
             </div>
+            {!hasDownloaded ? (
+              <div className="mt-4 flex items-start bg-amber-50 border border-amber-200 rounded-md p-3">
+                <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="ml-2 text-sm text-amber-800">
+                  <strong>Download this now.</strong> This is the only copy of the private
+                  key -- the backend never stores it, so once you leave this page (or the
+                  page reloads) it cannot be retrieved again. You&apos;ll be warned before
+                  navigating away until you do.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-green-700">
+                ✓ Bundle downloaded. Keep it somewhere safe -- this was your only copy.
+              </p>
+            )}
             <div className="mt-4 p-4 bg-green-100 rounded-md">
               <h4 className="text-sm font-medium text-green-800 mb-2">Installation Instructions:</h4>
               <ul className="text-sm text-green-700 space-y-1">
