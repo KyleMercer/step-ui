@@ -67,8 +67,18 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # wget is part of BusyBox and is already present on node:*-alpine, so this
 # doesn't need an extra package install (also surfaced by Docker UIs like
 # Dockhand).
+#
+# Deliberately 127.0.0.1, not localhost: HOSTNAME=0.0.0.0 above makes Node
+# bind an IPv4-only socket, but "localhost" inside the container resolves to
+# both 127.0.0.1 and ::1, and Alpine's resolver tries the IPv6 address
+# (::1) first. Nothing is listening there, so wget gets an immediate
+# "connection refused" and Docker marks the container unhealthy -- even
+# though the exact same server answers fine over IPv4 (which is also the
+# path a browser takes through Docker's published port). Pinning the
+# healthcheck to the literal IPv4 loopback address sidesteps the DNS
+# resolution order entirely.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- --spider http://localhost:3000/ || exit 1
+    CMD wget -qO- --spider http://127.0.0.1:3000/ || exit 1
 
 # Build identity, baked into the image so `docker inspect` -- and any UI
 # that reads standard image labels, like Portainer or Dockhand -- always
