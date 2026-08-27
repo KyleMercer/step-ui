@@ -4,7 +4,15 @@
 
 set -e
 
-echo "🚀 Setting up Step-CA Web UI..."
+cd "$(dirname "$0")"
+
+# Just informational here (this script always builds via plain
+# `docker compose up -d --build`, unversioned) -- lets you see, before
+# anything runs, which VERSION you're about to bring up. For a build that
+# actually bakes this into the images as OCI labels, use ./build.sh instead.
+APP_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
+
+echo "🚀 Setting up Step-CA Web UI (VERSION ${APP_VERSION})..."
 echo "📦 Repository: https://github.com/marcin-kruszynski/step-ui.git"
 
 # Check if Docker is installed
@@ -21,7 +29,7 @@ fi
 
 # Create necessary directories
 echo "📁 Creating directories..."
-mkdir -p data
+mkdir -p data logs
 
 # Copy environment file if it doesn't exist
 if [ ! -f .env ]; then

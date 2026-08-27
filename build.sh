@@ -21,6 +21,13 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Same pattern setup.sh already uses for `data` -- look for each directory,
+# create it if it's not there yet. `data` matters here too: this script can
+# run standalone (docker compose build doesn't need containers running),
+# and Compose will otherwise silently auto-create an empty `data` on the
+# first `up`, which is fine, just not as explicit.
+mkdir -p logs data
+
 APP_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
 GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
@@ -33,7 +40,7 @@ fi
 
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 BUILD_ID="${GIT_SHA}${GIT_DIRTY}"
-LOG_FILE="build-v${APP_VERSION}-${BUILD_ID}-$(date -u +%Y%m%d-%H%M%S).log"
+LOG_FILE="logs/build-v${APP_VERSION}-${BUILD_ID}-$(date -u +%Y%m%d-%H%M%S).log"
 
 echo "========================================="
 echo "Building step-ui images"
@@ -51,7 +58,13 @@ if [ -n "$GIT_DIRTY" ]; then
     echo ""
 fi
 
-docker compose build --no-cache --progress=plain \
+# --progress is a global `docker compose` flag, not a `build` subcommand
+# flag -- it has to come before `build` or Compose warns and silently
+# ignores it (confirmed against a real build log: with it placed after
+# `build`, Compose printed exactly that warning and fell back to its
+# default folded TTY output instead of the flat/unfolded log this script
+# depends on to capture everything, warnings included).
+docker compose --progress=plain build --no-cache \
     --build-arg APP_VERSION="${APP_VERSION}" \
     --build-arg GIT_SHA="${BUILD_ID}" \
     --build-arg BUILD_DATE="${BUILD_DATE}" \
