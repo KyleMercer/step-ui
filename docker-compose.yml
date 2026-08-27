@@ -1,3 +1,14 @@
+# An explicit project name, rather than the default (derived from whatever
+# directory this happens to be run from -- "step-ui" for a plain clone).
+# Two reasons: it's what ends up baked into the image as the
+# com.docker.compose.project label when building via `docker compose build`
+# (e.g. through build.sh), independent of the checkout's directory name; and
+# if `docker compose up` were ever run directly from this checkout (it's
+# meant for building only -- see build.sh/README), it creates its own
+# distinctly-named project/containers/network instead of a bare "step-ui"
+# that could be confused with any other checkout or stack.
+name: step-ui-build
+
 services:
   backend:
     build: ./backend
