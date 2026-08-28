@@ -2,6 +2,17 @@
 
 A modern web interface for managing certificates with Smallstep Step-CA.
 
+## Acknowledgement
+
+This user interface would not be possible without the effort by @marcin-kruszynski in the first place.
+The enhancements made to the original step-ui were largely the work of Claude AI.
+
+## Disclaimer
+
+Any use of step-ui should be confined to personal, non-mission critical applications such as a homelab. While
+additional security hardening has been incorporated, the security posture of this product should be considered
+unsuitable for production use in a business/enterprise environment.  
+
 ## Features
 
 - Issue certificates with custom SANs
