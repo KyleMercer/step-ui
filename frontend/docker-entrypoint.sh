@@ -22,7 +22,13 @@ set -eu
 # NEXT_PUBLIC_* variables that need the same treatment -- each one just
 # needs a matching `ENV <NAME>=__RUNTIME_<NAME>__` line in the Dockerfile's
 # builder stage before `npm run build`.
-RUNTIME_VARS="NEXT_PUBLIC_API_URL"
+#
+# NEXT_PUBLIC_API_AUTH_TOKEN needs this too, for the same reason as
+# NEXT_PUBLIC_API_URL: without it, the shared-secret token the frontend
+# sends to the backend would only ever be whatever it was at image build
+# time, so rotating/setting API_AUTH_TOKEN later would need a full image
+# rebuild rather than just recreating the container.
+RUNTIME_VARS="NEXT_PUBLIC_API_URL NEXT_PUBLIC_API_AUTH_TOKEN"
 
 for var_name in $RUNTIME_VARS; do
   placeholder="__RUNTIME_${var_name}__"

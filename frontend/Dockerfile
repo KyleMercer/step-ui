@@ -22,6 +22,13 @@ COPY . .
 # working as a normal environment variable set in docker-compose.yml.
 ENV NEXT_PUBLIC_API_URL=__RUNTIME_NEXT_PUBLIC_API_URL__
 
+# Same runtime-substitution treatment as NEXT_PUBLIC_API_URL above, for the
+# shared-secret bearer token sent to the backend (see API_AUTH_TOKEN /
+# NEXT_PUBLIC_API_AUTH_TOKEN in example.env) -- otherwise setting or
+# rotating the token would require rebuilding this image, not just
+# recreating the container.
+ENV NEXT_PUBLIC_API_AUTH_TOKEN=__RUNTIME_NEXT_PUBLIC_API_AUTH_TOKEN__
+
 # Unlike API_URL above, version/commit/build-date genuinely are build-time
 # constants -- a rebuild is required to change them anyway -- so these get
 # the real values directly, no placeholder/runtime-substitution dance

@@ -2,10 +2,22 @@ import axios from 'axios'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
+// Only set when the backend's API_AUTH_TOKEN is configured (see
+// docker-compose.yml / example.env). NOTE: this is a NEXT_PUBLIC_* value,
+// so it ships in the client-side JS bundle -- it's a shared secret between
+// this frontend and the backend, not a substitute for real user
+// authentication. Anyone who can load this page can read it out of the
+// bundle and call the backend directly with it. What it *does* buy you:
+// the backend rejects requests that don't go through (or extract the
+// secret from) this frontend, which is enough to stop casual/automated
+// hits against an exposed backend port.
+const API_AUTH_TOKEN = process.env.NEXT_PUBLIC_API_AUTH_TOKEN || ''
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
+    ...(API_AUTH_TOKEN ? { Authorization: `Bearer ${API_AUTH_TOKEN}` } : {}),
   },
 })
 

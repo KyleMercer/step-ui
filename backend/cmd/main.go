@@ -42,25 +42,21 @@ func main() {
 	// Initialize handlers
 	handlers := api.NewHandlers(database, stepClient)
 
+	if cfg.APIAuthToken == "" {
+		log.Println("WARNING: API_AUTH_TOKEN is not set -- the API is unauthenticated. Anyone who can reach it can issue, sign, and revoke certificates. Set API_AUTH_TOKEN in your .env to require a bearer token.")
+	}
+
 	// Setup Gin router
 	r := gin.Default()
 
-	// Add CORS middleware
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// CORS: restricted to CORS_ALLOWED_ORIGIN (defaults to the frontend's
+	// own default address) instead of the previous "*", which let any
+	// website's client-side JS call this API from a visitor's browser.
+	r.Use(api.CORS(cfg.CORSAllowedOrigin))
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	})
-
-	// Setup routes
-	api.SetupRoutes(r, handlers)
+	// Setup routes (authToken == "" leaves /api/* unauthenticated, matching
+	// the previous behavior, but see the warning logged above)
+	api.SetupRoutes(r, handlers, cfg.APIAuthToken)
 
 	// Start server
 	log.Printf("Starting server on port %d", cfg.Port)
