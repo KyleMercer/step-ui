@@ -58,6 +58,10 @@ PROVISIONER_PASSWORD=your_provisioner_password
 # Optional but recommended -- see Security Notes below
 API_AUTH_TOKEN=
 NEXT_PUBLIC_API_AUTH_TOKEN=
+
+# Creates the first admin account -- see "User Accounts & Roles" below
+INITIAL_ADMIN_USERNAME=admin
+INITIAL_ADMIN_PASSWORD=
 ```
 
 **Important:** Replace the values with your actual Step-CA details:
@@ -68,6 +72,8 @@ NEXT_PUBLIC_API_AUTH_TOKEN=
 - `API_AUTH_TOKEN` / `NEXT_PUBLIC_API_AUTH_TOKEN`: set both to the same
   value (e.g. output of `openssl rand -hex 32`) to require a bearer token
   on the API; see Security Notes
+- `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD`: creates the first
+  login account on first boot; see "User Accounts & Roles" below
 
 ### 3. Frontend API URL
 
@@ -103,6 +109,41 @@ docker compose up -d
 ```
 
 4. Access the web interface at `http://localhost:3000`
+
+## User Accounts & Roles
+
+step-ui requires signing in. There's no self-registration -- accounts are
+created and managed by an admin from the Settings page.
+
+**First login:** on first boot, if no accounts exist yet, the backend
+creates one admin account from `INITIAL_ADMIN_USERNAME` /
+`INITIAL_ADMIN_PASSWORD` in your `.env`. This only ever happens once --
+those two variables are checked only when the accounts table is completely
+empty, and are ignored on every start after that (safe to leave set, blank
+them out, or change them; none of it matters once an account exists). If
+the table is empty and they're unset, the backend logs a startup warning
+and nobody can log in until you set them and restart.
+
+**Roles:**
+- **admin** -- full access: issue, sign, renew, and revoke certificates,
+  view CA settings, and manage user accounts (Settings → User Accounts).
+- **viewer** -- read-only: can view the certificate inventory and CA
+  settings, but not issue/sign/renew/revoke, and can't manage users. The
+  nav bar hides links to pages a viewer can't use, but that's just UX --
+  the backend independently rejects those requests for a viewer account
+  regardless of what the frontend shows.
+
+**Sessions:** logging in sets a session cookie good for 30 days. Logging
+out, changing a user's password, or deleting a user account all
+immediately invalidate any session tied to that account -- there's nothing
+client-side to expire, the session is just gone from the backend's
+database. The last remaining admin account can't be demoted to viewer or
+deleted, so there's no way to lock yourself out entirely once at least one
+admin exists.
+
+This layers on top of `API_AUTH_TOKEN` (see Security Notes below), it
+doesn't replace it -- that token is a separate container-to-container
+shared secret between the frontend and backend, unrelated to user logins.
 
 ## Build Versioning
 
@@ -202,8 +243,11 @@ npm run dev
 - `CORS_ALLOWED_ORIGIN` restricts which origin the backend accepts
   browser requests from (defaults to `http://localhost:3000`). Set it if
   you access the frontend at a different host/port.
-- Implement proper multi-user authentication and authorization if this
-  needs to support more than one trusted operator
+- User accounts (admin/viewer roles, session cookies) gate both the web
+  pages and the API itself -- see "User Accounts & Roles" above. Session
+  cookies are set without `Secure`, matching every other design choice
+  here around running over plain HTTP on a home LAN; if you put this
+  behind real TLS, consider that when judging your own exposure.
 
 ## License
 

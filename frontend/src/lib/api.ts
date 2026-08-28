@@ -15,6 +15,14 @@ const API_AUTH_TOKEN = process.env.NEXT_PUBLIC_API_AUTH_TOKEN || ''
 
 const api = axios.create({
   baseURL: API_URL,
+  // Required for the session cookie (see auth-context.tsx) to actually
+  // flow: the browser is calling a different port than the page it's
+  // running on (frontend:3000 talking to backend:8080 directly), which
+  // counts as cross-origin for credentialed-request purposes even though
+  // it's the same host. Without this, the cookie set by /api/auth/login
+  // would never be sent back on subsequent requests. The backend's CORS
+  // middleware has the matching Access-Control-Allow-Credentials header.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     ...(API_AUTH_TOKEN ? { Authorization: `Bearer ${API_AUTH_TOKEN}` } : {}),
@@ -29,8 +37,23 @@ export interface Certificate {
   not_after: string
   status: string
   key_strategy: string
+  owner: string
   created_at: string
   updated_at: string
+}
+
+export type Role = 'admin' | 'viewer'
+
+export interface AuthUser {
+  username: string
+  role: Role
+}
+
+export interface UserAccount {
+  id: number
+  username: string
+  role: Role
+  created_at: string
 }
 
 export interface IssueRequest {
@@ -130,6 +153,44 @@ export const certificateApi = {
   getVersion: async (): Promise<VersionInfo> => {
     const response = await api.get('/api/version')
     return response.data
+  },
+}
+
+// User accounts and sessions. Login/logout/me are usable by anyone (me
+// reports 401 when there's no valid session); the user-management calls
+// are admin-only at the backend, so a viewer calling them just gets a 403.
+export const authApi = {
+  login: async (username: string, password: string): Promise<AuthUser> => {
+    const response = await api.post('/api/auth/login', { username, password })
+    return response.data
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post('/api/auth/logout')
+  },
+
+  me: async (): Promise<AuthUser> => {
+    const response = await api.get('/api/auth/me')
+    return response.data
+  },
+
+  listUsers: async (): Promise<UserAccount[]> => {
+    const response = await api.get('/api/users')
+    return response.data.users
+  },
+
+  createUser: async (data: { username: string; password: string; role: Role }): Promise<UserAccount> => {
+    const response = await api.post('/api/users', data)
+    return response.data.user
+  },
+
+  updateUser: async (id: number, data: { password?: string; role?: Role }): Promise<UserAccount> => {
+    const response = await api.put(`/api/users/${id}`, data)
+    return response.data.user
+  },
+
+  deleteUser: async (id: number): Promise<void> => {
+    await api.delete(`/api/users/${id}`)
   },
 }
 

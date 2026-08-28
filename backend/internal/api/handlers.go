@@ -50,6 +50,7 @@ type CertResponse struct {
 	NotAfter    time.Time `json:"not_after"`
 	Status      string    `json:"status"`
 	KeyStrategy string    `json:"key_strategy"`
+	Owner       string    `json:"owner"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -80,6 +81,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 	certID := uuid.New().String()
 
 	// Store certificate metadata in database
+	who := actorName(c)
 	sansJSON, _ := json.Marshal(req.SANs)
 	cert := &db.Certificate{
 		ID:          certID,
@@ -90,7 +92,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		Status:      "active",
 		KeyStrategy: "server",
 		StorageRef:  "ephemeral",
-		OwnerUser:   "system", // No auth for MVP
+		OwnerUser:   who,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -103,7 +105,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 	// Log audit event
 	auditEvent := &db.AuditEvent{
 		CertID:    certID,
-		Who:       "system",
+		Who:       who,
 		Action:    "issued",
 		Details:   fmt.Sprintf("CN: %s, SANs: %v", req.CN, req.SANs),
 		Timestamp: time.Now(),
@@ -126,6 +128,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
+		Owner:       who,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -164,6 +167,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 	sans := bundle.SANs
 
 	// Store certificate metadata in database
+	who := actorName(c)
 	sansJSON, _ := json.Marshal(sans)
 	cert := &db.Certificate{
 		ID:          certID,
@@ -174,7 +178,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 		Status:      "active",
 		KeyStrategy: "csr",
 		StorageRef:  "ephemeral",
-		OwnerUser:   "system",
+		OwnerUser:   who,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -187,7 +191,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 	// Log audit event
 	auditEvent := &db.AuditEvent{
 		CertID:    certID,
-		Who:       "system",
+		Who:       who,
 		Action:    "signed_csr",
 		Details:   fmt.Sprintf("CN: %s", cn),
 		Timestamp: time.Now(),
@@ -203,6 +207,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "csr",
+		Owner:       who,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -252,6 +257,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 			NotAfter:    cert.NotAfter,
 			Status:      cert.Status,
 			KeyStrategy: cert.KeyStrategy,
+			Owner:       cert.OwnerUser,
 			CreatedAt:   cert.CreatedAt,
 			UpdatedAt:   cert.UpdatedAt,
 		})
@@ -281,6 +287,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,
+		Owner:       cert.OwnerUser,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -329,10 +336,12 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		return
 	}
 
-	// Log audit event
+	// Log audit event. OwnerUser on the certificate record itself is left
+	// as whoever originally issued it -- Who here is about who performed
+	// this particular renew action, which can be a different account.
 	auditEvent := &db.AuditEvent{
 		CertID:    certID,
-		Who:       "system",
+		Who:       actorName(c),
 		Action:    "renewed",
 		Details:   fmt.Sprintf("CN: %s, new serial: %s", cert.CN, bundle.Serial),
 		Timestamp: time.Now(),
@@ -359,6 +368,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,
+		Owner:       cert.OwnerUser,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -407,7 +417,7 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 	// Log audit event
 	auditEvent := &db.AuditEvent{
 		CertID:    certID,
-		Who:       "system",
+		Who:       actorName(c),
 		Action:    "revoked",
 		Details:   fmt.Sprintf("CN: %s", cert.CN),
 		Timestamp: time.Now(),

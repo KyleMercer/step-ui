@@ -5,8 +5,11 @@ import { certificateApi, getFrontendSystemInfo, CASettings, VersionInfo, Fronten
 import { Shield, Copy, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
+import { useAuth } from '@/lib/auth-context'
+import UserManagement from './user-management'
 
 export default function Settings() {
+  const { user } = useAuth()
   const [settings, setSettings] = useState<CASettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [backendInfo, setBackendInfo] = useState<VersionInfo | null>(null)
@@ -83,6 +86,11 @@ export default function Settings() {
         </div>
 
         <div className="space-y-8">
+          {/* User Accounts (admin-only -- the backend independently 403s
+              every one of these calls for a viewer, so this is purely about
+              not showing a section that can't do anything for them) */}
+          {user?.role === 'admin' && <UserManagement />}
+
           {/* CA Information */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">

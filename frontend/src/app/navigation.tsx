@@ -2,14 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield, FileText, List, Settings, Home } from 'lucide-react'
+import { Shield, FileText, List, Settings, Home, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNavigationGuardMessage } from '@/lib/navigation-guard'
+import { useAuth } from '@/lib/auth-context'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Issue Certificate', href: '/issue', icon: Shield },
-  { name: 'Sign CSR', href: '/sign-csr', icon: FileText },
+  { name: 'Issue Certificate', href: '/issue', icon: Shield, adminOnly: true },
+  { name: 'Sign CSR', href: '/sign-csr', icon: FileText, adminOnly: true },
   { name: 'Inventory', href: '/inventory', icon: List },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
@@ -17,6 +18,7 @@ const navigation = [
 export default function Navigation() {
   const pathname = usePathname()
   const guardMessage = useNavigationGuardMessage()
+  const { user, logout } = useAuth()
 
   // Issue Certificate / Sign CSR register a warning here while they have
   // undownloaded content -- without this, these persistent top-bar links
@@ -26,6 +28,18 @@ export default function Navigation() {
     if (guardMessage && !confirm(guardMessage)) {
       e.preventDefault()
     }
+  }
+
+  // The backend already rejects these calls with a 403 for a viewer -- this
+  // is purely UX (no point showing a link that will just bounce), not the
+  // actual access control.
+  const visibleNavigation = navigation.filter((item) => !item.adminOnly || user?.role === 'admin')
+
+  const handleLogout = () => {
+    if (guardMessage && !confirm(guardMessage)) {
+      return
+    }
+    logout()
   }
 
   return (
@@ -38,7 +52,7 @@ export default function Navigation() {
               <span className="ml-2 text-xl font-bold text-gray-900">Step-CA Web UI</span>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              {navigation.map((item) => {
+              {visibleNavigation.map((item) => {
                 const Icon = item.icon
                 return (
                   <Link
@@ -59,6 +73,21 @@ export default function Navigation() {
               })}
             </div>
           </div>
+
+          {user && (
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-500">
+                {user.username} <span className="text-gray-400">({user.role})</span>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700"
+              >
+                <LogOut className="h-4 w-4 mr-1" />
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>

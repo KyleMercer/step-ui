@@ -6,8 +6,11 @@ import { formatDate, getDaysUntilExpiry, getExpiryStatus, downloadBase64File } f
 import { Shield, AlertTriangle, CheckCircle, Clock, Search, Filter, Download, RotateCcw, X, Copy } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
+import { useAuth } from '@/lib/auth-context'
 
 export default function Inventory() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -247,7 +250,7 @@ export default function Inventory() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        {cert.status === 'active' && (
+                        {isAdmin && cert.status === 'active' && (
                           <>
                             <button
                               onClick={() => handleRenew(cert)}
@@ -322,6 +325,10 @@ export default function Inventory() {
                         <Copy className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Issued By</label>
+                    <p className="text-sm text-gray-900">{selectedCert.owner || 'Unknown'}</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">Status</label>
