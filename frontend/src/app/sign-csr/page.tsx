@@ -6,9 +6,10 @@ import { certificateApi, SignCSRRequest } from '@/lib/api'
 import { FileText, Upload, AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
+import { useRegisterNavigationGuard } from '@/lib/navigation-guard'
 
 const UNDOWNLOADED_WARNING =
-  "You haven't downloaded the signed certificate/chain yet. The PEM content shown here isn't saved anywhere (only the certificate's metadata is, in Inventory) -- once you leave this page it's gone, though you can always re-sign the same CSR to get a fresh copy. Leave anyway?"
+  "You haven't downloaded the signed certificate/chain yet. The PEM content shown here isn't saved anywhere (only the certificate's metadata is kept in Inventory) -- once you leave this page it's gone, though you can always re-sign the same CSR to get a fresh copy. Leave anyway?"
 
 interface FormData {
   csr_pem: string
@@ -51,6 +52,11 @@ export default function SignCSR() {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [stillNeedsDownload])
+
+  // Same reasoning as Issue Certificate: registers the warning with the
+  // persistent Navigation bar and Footer so their links also confirm()
+  // before leaving, not just this page's own "Back to Dashboard" / "Cancel".
+  useRegisterNavigationGuard(stillNeedsDownload ? UNDOWNLOADED_WARNING : null)
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -261,7 +267,7 @@ MIIB...
                 <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <p className="ml-2 text-sm text-amber-800">
                   <strong>Download both files now.</strong> This PEM content isn&apos;t saved
-                  anywhere -- only the certificate&apos;s metadata is kept, in Inventory -- so
+                  anywhere -- only the certificate&apos;s metadata is kept in Inventory -- so
                   once you leave this page it&apos;s gone (though you can always re-sign the
                   same CSR to get a fresh copy). You&apos;ll be warned before navigating away
                   until both are downloaded.

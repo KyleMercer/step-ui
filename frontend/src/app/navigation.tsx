@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Shield, FileText, List, Settings, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useNavigationGuardMessage } from '@/lib/navigation-guard'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -15,6 +16,17 @@ const navigation = [
 
 export default function Navigation() {
   const pathname = usePathname()
+  const guardMessage = useNavigationGuardMessage()
+
+  // Issue Certificate / Sign CSR register a warning here while they have
+  // undownloaded content -- without this, these persistent top-bar links
+  // were the one way to leave those pages with no warning at all (only
+  // their own in-page "Back to Dashboard" / "Cancel" links were guarded).
+  const confirmLeaveIfGuarded = (e: React.MouseEvent) => {
+    if (guardMessage && !confirm(guardMessage)) {
+      e.preventDefault()
+    }
+  }
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -32,6 +44,7 @@ export default function Navigation() {
                   <Link
                     key={item.name}
                     href={item.href}
+                    onClick={confirmLeaveIfGuarded}
                     className={cn(
                       pathname === item.href
                         ? 'border-blue-500 text-blue-600'

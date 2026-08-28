@@ -7,6 +7,7 @@ import { Shield, Download, AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { downloadBase64File } from '@/lib/utils'
 import Link from 'next/link'
+import { useRegisterNavigationGuard } from '@/lib/navigation-guard'
 
 const UNDOWNLOADED_WARNING =
   "You haven't downloaded the certificate bundle yet. This is the only copy of the private key -- once you leave this page, it cannot be retrieved again. Leave anyway?"
@@ -44,6 +45,14 @@ export default function IssueCertificate() {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [downloadData, hasDownloaded])
+
+  // Registers the same warning with the persistent Navigation bar and
+  // Footer (rendered once in layout.tsx, outside this page) so their links
+  // also confirm() before leaving -- previously only this page's own
+  // "Back to Dashboard" / "Cancel" links were guarded, so the top nav and
+  // footer could silently navigate away with the private key still
+  // undownloaded.
+  useRegisterNavigationGuard(downloadData && !hasDownloaded ? UNDOWNLOADED_WARNING : null)
 
   const {
     register,
