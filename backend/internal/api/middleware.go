@@ -19,9 +19,12 @@ import (
 const SessionCookieName = "step_ui_session"
 
 // SessionDuration is how long a session lasts before requiring another
-// login. Fixed at creation time (not refreshed on activity) -- simple, and
-// "log back in once a month" is a perfectly reasonable homelab tradeoff.
-const SessionDuration = 30 * 24 * time.Hour
+// login. Fixed at creation time (not refreshed on activity) -- deliberately
+// kept simple (no idle-timeout tracking) rather than a sliding expiry, since
+// the actual security boundary here is the login screen itself, not how
+// long a session inside it stays open. 3 days keeps a leaked/stolen session
+// cookie's useful window short without adding that complexity.
+const SessionDuration = 3 * 24 * time.Hour
 
 const userContextKey = "auth_user"
 

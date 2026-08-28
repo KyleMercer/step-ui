@@ -133,8 +133,9 @@ and nobody can log in until you set them and restart.
   the backend independently rejects those requests for a viewer account
   regardless of what the frontend shows.
 
-**Sessions:** logging in sets a session cookie good for 30 days. Logging
-out, changing a user's password, or deleting a user account all
+**Sessions:** logging in sets a session cookie good for 3 days, with no
+idle timeout (it's a flat expiry from login, not extended by activity).
+Logging out, changing a user's password, or deleting a user account all
 immediately invalidate any session tied to that account -- there's nothing
 client-side to expire, the session is just gone from the backend's
 database. The last remaining admin account can't be demoted to viewer or
