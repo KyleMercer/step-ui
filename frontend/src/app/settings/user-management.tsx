@@ -224,9 +224,17 @@ export default function UserManagement() {
               type="text"
               className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
-            {addErrors.username && (
-              <p className="mt-1 text-sm text-red-600">{addErrors.username.message}</p>
-            )}
+            {/* Always rendered, error or not -- a non-breaking space holds
+                this line's height so the row below (Password, in
+                particular) never grows or shrinks depending on which
+                field currently has a validation error. Pressing Enter
+                after just the username (a plain browser default -- any
+                single text input submits its form on Enter) used to make
+                this exact swap happen, visibly shoving Password out of
+                line with everything else. */}
+            <p className="mt-1 text-sm text-red-600 min-h-[1.25rem]">
+              {addErrors.username?.message || ' '}
+            </p>
           </div>
           <div>
             <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
@@ -242,9 +250,9 @@ export default function UserManagement() {
               autoComplete="new-password"
               className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
-            {addErrors.password && (
-              <p className="mt-1 text-sm text-red-600">{addErrors.password.message}</p>
-            )}
+            <p className="mt-1 text-sm text-red-600 min-h-[1.25rem]">
+              {addErrors.password?.message || ' '}
+            </p>
           </div>
           <div>
             <label htmlFor="new-role" className="block text-sm font-medium text-gray-700">
@@ -258,8 +266,13 @@ export default function UserManagement() {
               <option value="viewer">viewer</option>
               <option value="admin">admin</option>
             </select>
+            {/* No validation error ever lands here -- this is purely to
+                match the reserved-height line in the other three cells,
+                so this row's height doesn't depend on which field errors. */}
+            <p className="mt-1 text-sm min-h-[1.25rem]">{' '}</p>
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 invisible">Add</label>
             <button
               type="submit"
               disabled={addingUser}
@@ -268,6 +281,7 @@ export default function UserManagement() {
               <UserPlus className="h-4 w-4 mr-2" />
               {addingUser ? 'Adding…' : 'Add User'}
             </button>
+            <p className="mt-1 text-sm min-h-[1.25rem]">{' '}</p>
           </div>
         </form>
       </div>
