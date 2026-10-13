@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"step-ca-webui/internal/api"
+	"step-ca-webui/internal/auth"
 	"step-ca-webui/internal/config"
 	"step-ca-webui/internal/db"
 	"step-ca-webui/internal/step"
@@ -29,6 +30,34 @@ func main() {
 	database, err := db.NewDatabase(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Bootstrap the first admin account. There's no self-registration
+	// flow (this is an admin-managed user list, not a public sign-up
+	// form), so this env-var seed is the one way to get from "no accounts
+	// exist" to "there's an admin who can log in and create everyone
+	// else's accounts from Settings." Only runs against a genuinely empty
+	// users table -- once any account exists, these two env vars are
+	// never consulted again, so changing them later does nothing.
+	if count, err := database.CountUsers(); err != nil {
+		log.Printf("WARNING: failed to check for existing user accounts: %v", err)
+	} else if count == 0 {
+		if cfg.InitialAdminUsername == "" || cfg.InitialAdminPassword == "" {
+			log.Println("WARNING: no user accounts exist yet and INITIAL_ADMIN_USERNAME/INITIAL_ADMIN_PASSWORD are not set -- nobody can log in to step-ui. Set both in your .env and restart to create the first admin account.")
+		} else if hash, err := auth.HashPassword(cfg.InitialAdminPassword); err != nil {
+			log.Printf("WARNING: failed to hash initial admin password: %v", err)
+		} else {
+			admin := &db.User{
+				Username:     cfg.InitialAdminUsername,
+				PasswordHash: hash,
+				Role:         db.RoleAdmin,
+			}
+			if err := database.CreateUser(admin); err != nil {
+				log.Printf("WARNING: failed to create initial admin account %q: %v", cfg.InitialAdminUsername, err)
+			} else {
+				log.Printf("Created initial admin account %q", cfg.InitialAdminUsername)
+			}
+		}
 	}
 
 	// Initialize step client

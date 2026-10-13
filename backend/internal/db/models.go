@@ -35,3 +35,34 @@ type CASettings struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
+
+// Role is deliberately a small closed set (just these two), not a free-text
+// permissions system -- admin can do everything, viewer is read-only. See
+// the api package's RequireRole for where that's actually enforced.
+type Role string
+
+const (
+	RoleAdmin  Role = "admin"
+	RoleViewer Role = "viewer"
+)
+
+type User struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Username     string    `gorm:"uniqueIndex" json:"username"`
+	PasswordHash string    `json:"-"` // bcrypt; never serialized back to a client
+	Role         Role      `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// Session is an opaque server-side session record, not a JWT -- the token
+// is just a random identifier looked up here on every request (see
+// api.RequireSession). That makes revocation trivial and immediate: logout,
+// a password change, or an admin deleting an account all just delete the
+// matching row(s), with nothing client-side to expire or invalidate.
+type Session struct {
+	Token     string    `gorm:"primaryKey" json:"-"`
+	UserID    uint      `gorm:"index" json:"-"`
+	ExpiresAt time.Time `json:"-"`
+	CreatedAt time.Time `json:"-"`
+}

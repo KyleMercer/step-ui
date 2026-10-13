@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { certificateApi, SignCSRRequest } from '@/lib/api'
-import { FileText, Upload, AlertCircle } from 'lucide-react'
+import { FileText, Upload, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 import { useRegisterNavigationGuard } from '@/lib/navigation-guard'
+import { useAuth } from '@/lib/auth-context'
 
 const UNDOWNLOADED_WARNING =
   "You haven't downloaded the signed certificate/chain yet. The PEM content shown here isn't saved anywhere (only the certificate's metadata is kept in Inventory) -- once you leave this page it's gone, though you can always re-sign the same CSR to get a fresh copy. Leave anyway?"
@@ -17,6 +18,7 @@ interface FormData {
 }
 
 export default function SignCSR() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [certData, setCertData] = useState<{
     cert_pem: string
@@ -126,6 +128,26 @@ export default function SignCSR() {
     if (stillNeedsDownload && !confirm(UNDOWNLOADED_WARNING)) {
       e.preventDefault()
     }
+  }
+
+  // Backend already 403s this for a viewer -- this just avoids showing a
+  // form that can't submit successfully. Hooks above still run unconditionally
+  // on every render, viewer or not, so this early return is safe.
+  if (user?.role === 'viewer') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <Lock className="h-10 w-10 text-gray-400 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold text-gray-900">Access Restricted</h1>
+          <p className="mt-2 text-gray-600">
+            Signing CSRs requires an admin account. Contact your administrator if you need one signed.
+          </p>
+          <Link href="/" className="mt-4 inline-block text-blue-600 hover:text-blue-500 text-sm font-medium">
+            ← Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

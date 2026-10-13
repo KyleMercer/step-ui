@@ -25,7 +25,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	// Auto-migrate the schema
-	if err := db.AutoMigrate(&Certificate{}, &AuditEvent{}, &CASettings{}); err != nil {
+	if err := db.AutoMigrate(&Certificate{}, &AuditEvent{}, &CASettings{}, &User{}, &Session{}); err != nil {
 		return nil, err
 	}
 
@@ -45,19 +45,19 @@ func (d *Database) GetCertificate(id string) (*Certificate, error) {
 func (d *Database) ListCertificates(limit, offset int, status string) ([]Certificate, error) {
 	var certs []Certificate
 	query := d.DB.Order("created_at DESC")
-	
+
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	err := query.Find(&certs).Error
 	return certs, err
 }
@@ -77,15 +77,82 @@ func (d *Database) LogAuditEvent(event *AuditEvent) error {
 func (d *Database) GetAuditEvents(certID string, limit int) ([]AuditEvent, error) {
 	var events []AuditEvent
 	query := d.DB.Order("timestamp DESC")
-	
+
 	if certID != "" {
 		query = query.Where("cert_id = ?", certID)
 	}
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	err := query.Find(&events).Error
 	return events, err
+}
+
+// --- Users ---
+
+func (d *Database) CreateUser(user *User) error {
+	return d.DB.Create(user).Error
+}
+
+func (d *Database) GetUserByUsername(username string) (*User, error) {
+	var user User
+	err := d.DB.Where("username = ?", username).First(&user).Error
+	return &user, err
+}
+
+func (d *Database) GetUserByID(id uint) (*User, error) {
+	var user User
+	err := d.DB.First(&user, id).Error
+	return &user, err
+}
+
+func (d *Database) ListUsers() ([]User, error) {
+	var users []User
+	err := d.DB.Order("username").Find(&users).Error
+	return users, err
+}
+
+func (d *Database) CountUsers() (int64, error) {
+	var count int64
+	err := d.DB.Model(&User{}).Count(&count).Error
+	return count, err
+}
+
+func (d *Database) CountUsersByRole(role Role) (int64, error) {
+	var count int64
+	err := d.DB.Model(&User{}).Where("role = ?", role).Count(&count).Error
+	return count, err
+}
+
+func (d *Database) UpdateUser(user *User) error {
+	return d.DB.Save(user).Error
+}
+
+func (d *Database) DeleteUser(id uint) error {
+	return d.DB.Where("id = ?", id).Delete(&User{}).Error
+}
+
+// --- Sessions ---
+
+func (d *Database) CreateSession(session *Session) error {
+	return d.DB.Create(session).Error
+}
+
+func (d *Database) GetSession(token string) (*Session, error) {
+	var session Session
+	err := d.DB.Where("token = ?", token).First(&session).Error
+	return &session, err
+}
+
+func (d *Database) DeleteSession(token string) error {
+	return d.DB.Where("token = ?", token).Delete(&Session{}).Error
+}
+
+// DeleteSessionsForUser invalidates every session belonging to a user --
+// used on password change and account deletion so a leaked/stolen session
+// doesn't survive either one.
+func (d *Database) DeleteSessionsForUser(userID uint) error {
+	return d.DB.Where("user_id = ?", userID).Delete(&Session{}).Error
 }

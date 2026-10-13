@@ -5,8 +5,11 @@ import { certificateApi, Certificate } from '@/lib/api'
 import { formatDate, getDaysUntilExpiry, getExpiryStatus } from '@/lib/utils'
 import { Shield, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/lib/auth-context'
 
 export default function Dashboard() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -146,21 +149,29 @@ export default function Dashboard() {
             <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link
-                href="/issue"
-                className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Shield className="h-5 w-5 mr-2" />
-                Issue New Certificate
-              </Link>
-              <Link
-                href="/sign-csr"
-                className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <AlertTriangle className="h-5 w-5 mr-2" />
-                Sign CSR
-              </Link>
+            {/* Same admin gate as the nav bar and the Issue/Sign CSR pages
+                themselves -- the backend independently 403s these for a
+                viewer, this is just keeping the dashboard's own shortcuts
+                consistent with what the rest of the UI already hides. */}
+            <div className={`grid grid-cols-1 gap-4 ${isAdmin ? 'md:grid-cols-3' : ''}`}>
+              {isAdmin && (
+                <Link
+                  href="/issue"
+                  className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Shield className="h-5 w-5 mr-2" />
+                  Issue New Certificate
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  href="/sign-csr"
+                  className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <AlertTriangle className="h-5 w-5 mr-2" />
+                  Sign CSR
+                </Link>
+              )}
               <Link
                 href="/inventory"
                 className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"

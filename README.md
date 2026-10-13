@@ -69,6 +69,10 @@ PROVISIONER_PASSWORD=your_provisioner_password
 # Optional but recommended -- see Security Notes below
 API_AUTH_TOKEN=
 NEXT_PUBLIC_API_AUTH_TOKEN=
+
+# Creates the first admin account -- see "User Accounts & Roles" below
+INITIAL_ADMIN_USERNAME=admin
+INITIAL_ADMIN_PASSWORD=
 ```
 
 **Important:** Replace the values with your actual Step-CA details:
@@ -79,6 +83,8 @@ NEXT_PUBLIC_API_AUTH_TOKEN=
 - `API_AUTH_TOKEN` / `NEXT_PUBLIC_API_AUTH_TOKEN`: set both to the same
   value (e.g. output of `openssl rand -hex 32`) to require a bearer token
   on the API; see Security Notes
+- `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD`: creates the first
+  login account on first boot; see "User Accounts & Roles" below
 
 ### 3. Frontend API URL
 
@@ -114,6 +120,42 @@ docker compose up -d
 ```
 
 4. Access the web interface at `http://localhost:3000`
+
+## User Accounts & Roles
+
+step-ui requires signing in. There's no self-registration -- accounts are
+created and managed by an admin from the Settings page.
+
+**First login:** on first boot, if no accounts exist yet, the backend
+creates one admin account from `INITIAL_ADMIN_USERNAME` /
+`INITIAL_ADMIN_PASSWORD` in your `.env`. This only ever happens once --
+those two variables are checked only when the accounts table is completely
+empty, and are ignored on every start after that (safe to leave set, blank
+them out, or change them; none of it matters once an account exists). If
+the table is empty and they're unset, the backend logs a startup warning
+and nobody can log in until you set them and restart.
+
+**Roles:**
+- **admin** -- full access: issue, sign, renew, and revoke certificates,
+  view CA settings, and manage user accounts (Settings → User Accounts).
+- **viewer** -- read-only: can view the certificate inventory and CA
+  settings, but not issue/sign/renew/revoke, and can't manage users. The
+  nav bar hides links to pages a viewer can't use, but that's just UX --
+  the backend independently rejects those requests for a viewer account
+  regardless of what the frontend shows.
+
+**Sessions:** logging in sets a session cookie good for 3 days, with no
+idle timeout (it's a flat expiry from login, not extended by activity).
+Logging out, changing a user's password, or deleting a user account all
+immediately invalidate any session tied to that account -- there's nothing
+client-side to expire, the session is just gone from the backend's
+database. The last remaining admin account can't be demoted to viewer or
+deleted, so there's no way to lock yourself out entirely once at least one
+admin exists.
+
+This layers on top of `API_AUTH_TOKEN` (see Security Notes below), it
+doesn't replace it -- that token is a separate container-to-container
+shared secret between the frontend and backend, unrelated to user logins.
 
 ## Build Versioning
 
@@ -192,17 +234,55 @@ npm run dev
 
 ## Architecture
 
-- **Frontend**: Next.js 14 with TypeScript, TailwindCSS
+- **Frontend**: Next.js 16 with TypeScript, TailwindCSS
 - **Backend**: Go with Gin framework
 - **Database**: SQLite for certificate metadata and audit logs
 - **CA Integration**: Smallstep Step-CA via CLI
+
+## HTTPS
+
+Both containers serve plain HTTP to each other and to whatever's mounted -- there's no TLS code in step-ui itself, deliberately. Certificate storage, permissions, and renewal are a well-solved problem one layer up; a reverse proxy in front of the stack handles it far more robustly than anything hand-rolled here would, and it's the standard pattern for exactly this kind of setup. Terminate TLS at the proxy and step-ui never needs to know about certificates at all.
+
+Once you put a reverse proxy in front, two settings need to point at the proxy's HTTPS origin instead of the containers' plain-HTTP ones:
+
+- `NEXT_PUBLIC_API_URL` -- the URL the browser calls directly, e.g. `https://step-ui-api.home.arpa`
+- `CORS_ALLOWED_ORIGIN` -- the frontend's own origin as the browser now sees it, e.g. `https://step-ui.home.arpa`
+
+Any reverse proxy works (Caddy, Traefik, NGINX Proxy Manager, Synology's built-in one, etc.) -- point it at the frontend and backend containers' plain ports (3000 and 8080) and give it whatever certificate you want the browser to see. If you're already running step-ca for other things, **Caddy** is worth a look specifically: it can request and renew real certificates from your own step-ca automatically over ACME, instead of a public CA -- no self-signed browser warnings, and no paid wildcard needed. That does mean adding an ACME provisioner to step-ca (separate from the JWK provisioner step-ui itself uses): `step ca provisioner add acme --type ACME` on the CA host.
+
+Since step-ca's own ACME endpoint is itself serving a certificate signed by your CA (not a publicly trusted one), Caddy also needs to be told to trust your CA's root when it calls that endpoint -- via `trusted_roots`, pointed at your CA's root certificate (`step ca root` prints it, or it's at `$(step path)/certs/root_ca.crt` on the CA host). A minimal example:
+
+```
+step-ui.example.com {
+    tls {
+        issuer acme https://ca.example.com:9000/acme/acme/directory {
+            trusted_roots /etc/caddy/ca-root.pem
+        }
+    }
+    reverse_proxy step-ui-frontend:3000
+}
+
+step-ui-api.example.com {
+    tls {
+        issuer acme https://ca.example.com:9000/acme/acme/directory {
+            trusted_roots /etc/caddy/ca-root.pem
+        }
+    }
+    reverse_proxy step-ui-backend:8080
+}
+```
+
+(`acme/acme` in the URL is `/acme/<provisioner name>/directory` -- adjust to match your own provisioner's name. `/etc/caddy/ca-root.pem` is wherever you mount the CA's root cert into the Caddy container -- e.g. bind-mounting it read-only straight from the CA host's filesystem if Caddy runs there too. If Caddy runs in Docker, put it on the same network as the step-ui containers so it can reach them by service name, as above; otherwise reverse-proxy to the host's published `3000`/`8080` instead. Both hostnames need to actually resolve, internally, to wherever Caddy is listening -- step-ca has to be able to reach Caddy at that name to complete the ACME challenge, same as any ACME issuance.)
+
+If Caddy runs on the same host as step-ca itself, port 443 is likely already taken by step-ca -- move Caddy's own HTTPS listener to another port (append it to the site address, e.g. `step-ui.example.com:8443 { ... }`, browsers then need that port in the URL too) and add `disable_tlsalpn_challenge` inside the `issuer acme` block, since the TLS-ALPN-01 challenge is hardcoded by the ACME spec to port 443 and would otherwise collide. That leaves HTTP-01 (port 80) as the challenge method, which is fine as long as step-ca isn't also using port 80.
+
+NGINX Proxy Manager and most GUI reverse proxies don't support pointing at a custom/private ACME server -- only Let's Encrypt or a manually uploaded certificate -- so with those you're back to bring-your-own-cert with manual renewal, same as if step-ui handled it directly. Fine if you already have a wildcard cert you're managing that way regardless.
 
 ## Security Notes
 
 - Keep your `.env` file secure and never commit it to version control
 - The provisioner password is sensitive - protect it appropriately
 - Consider using Docker secrets for production deployments
-- Enable TLS for the backend API in production
 - Set `API_AUTH_TOKEN` (and matching `NEXT_PUBLIC_API_AUTH_TOKEN`) in
   `.env` if this is reachable beyond localhost. Without it, anyone who can
   reach the backend port can issue, sign, and revoke certificates with no
@@ -213,8 +293,11 @@ npm run dev
 - `CORS_ALLOWED_ORIGIN` restricts which origin the backend accepts
   browser requests from (defaults to `http://localhost:3000`). Set it if
   you access the frontend at a different host/port.
-- Implement proper multi-user authentication and authorization if this
-  needs to support more than one trusted operator
+- User accounts (admin/viewer roles, session cookies) gate both the web
+  pages and the API itself -- see "User Accounts & Roles" above. Session
+  cookies are set without `Secure`, matching every other design choice
+  here around running over plain HTTP on a home LAN; if you put this
+  behind real TLS, consider that when judging your own exposure.
 
 ## License
 

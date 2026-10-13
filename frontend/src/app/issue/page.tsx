@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { certificateApi, IssueRequest } from '@/lib/api'
-import { Shield, Download, AlertCircle } from 'lucide-react'
+import { Shield, Download, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { downloadBase64File } from '@/lib/utils'
 import Link from 'next/link'
 import { useRegisterNavigationGuard } from '@/lib/navigation-guard'
+import { useAuth } from '@/lib/auth-context'
 
 const UNDOWNLOADED_WARNING =
   "You haven't downloaded the certificate bundle yet. This is the only copy of the private key -- once you leave this page, it cannot be retrieved again. Leave anyway?"
@@ -21,6 +22,7 @@ interface FormData {
 }
 
 export default function IssueCertificate() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [downloadData, setDownloadData] = useState<{
     data: string
@@ -111,6 +113,26 @@ export default function IssueCertificate() {
     if (downloadData && !hasDownloaded && !confirm(UNDOWNLOADED_WARNING)) {
       e.preventDefault()
     }
+  }
+
+  // Backend already 403s this for a viewer -- this just avoids showing a
+  // form that can't submit successfully. Hooks above still run unconditionally
+  // on every render, viewer or not, so this early return is safe.
+  if (user?.role === 'viewer') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <Lock className="h-10 w-10 text-gray-400 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold text-gray-900">Access Restricted</h1>
+          <p className="mt-2 text-gray-600">
+            Issuing certificates requires an admin account. Contact your administrator if you need one issued.
+          </p>
+          <Link href="/" className="mt-4 inline-block text-blue-600 hover:text-blue-500 text-sm font-medium">
+            ← Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

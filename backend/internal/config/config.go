@@ -26,20 +26,32 @@ type Config struct {
 	// (from the browser's perspective) requests to this API from a
 	// visitor's browser.
 	CORSAllowedOrigin string
+
+	// InitialAdminUsername/InitialAdminPassword seed the very first admin
+	// account on startup, but only when the users table is completely
+	// empty (see cmd/main.go) -- there's no self-registration flow, so
+	// this is the one bootstrap mechanism to get from "no accounts exist"
+	// to "there's an admin who can log in and create everyone else's
+	// accounts from Settings." Once that first account exists, these two
+	// env vars are never consulted again; changing them later does nothing.
+	InitialAdminUsername string
+	InitialAdminPassword string
 }
 
 func Load() *Config {
 	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
 
 	return &Config{
-		CAURL:               getEnv("CA_URL", ""),
-		CARootFingerprint:   getEnv("CA_ROOT_FINGERPRINT", ""),
-		ProvisionerName:     getEnv("PROVISIONER_NAME", "ui-admin"),
-		ProvisionerPassword: getEnv("PROVISIONER_PASSWORD", ""),
-		DBPath:              getEnv("DB_PATH", "./data/certs.db"),
-		Port:                port,
-		APIAuthToken:        getEnv("API_AUTH_TOKEN", ""),
-		CORSAllowedOrigin:   getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
+		CAURL:                getEnv("CA_URL", ""),
+		CARootFingerprint:    getEnv("CA_ROOT_FINGERPRINT", ""),
+		ProvisionerName:      getEnv("PROVISIONER_NAME", "ui-admin"),
+		ProvisionerPassword:  getEnv("PROVISIONER_PASSWORD", ""),
+		DBPath:               getEnv("DB_PATH", "./data/certs.db"),
+		Port:                 port,
+		APIAuthToken:         getEnv("API_AUTH_TOKEN", ""),
+		CORSAllowedOrigin:    getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
+		InitialAdminUsername: getEnv("INITIAL_ADMIN_USERNAME", ""),
+		InitialAdminPassword: getEnv("INITIAL_ADMIN_PASSWORD", ""),
 	}
 }
 

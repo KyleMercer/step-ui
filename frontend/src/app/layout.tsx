@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
-import Navigation from './navigation'
-import Footer from './footer'
+import AppChrome from './app-chrome'
 import { NavigationGuardProvider } from '@/lib/navigation-guard'
+import { AuthProvider } from '@/lib/auth-context'
 
 // Deliberately using the system font stack (via Tailwind's default font-sans)
 // instead of next/font/google's Inter. next/font/google fetches font metadata
@@ -24,11 +24,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans flex flex-col min-h-screen">
         <NavigationGuardProvider>
-          <Navigation />
-          <div className="flex-1">{children}</div>
-          <Footer />
-          <Toaster position="top-right" />
+          <AuthProvider>
+            <AppChrome>{children}</AppChrome>
+          </AuthProvider>
         </NavigationGuardProvider>
+        <Toaster position="top-right" />
       </body>
     </html>
   )

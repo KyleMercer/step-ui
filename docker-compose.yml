@@ -24,6 +24,8 @@ services:
       - STEPPATH=/tmp/step-nonexistent
       - API_AUTH_TOKEN=${API_AUTH_TOKEN:-}
       - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
