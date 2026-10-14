@@ -18,6 +18,27 @@ type Certificate struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// Certificate statuses. Only "active" and "revoked" are ever stored by
+// step-ui itself; "expired" is derived at read time (see EffectiveStatus).
+const (
+	CertStatusActive  = "active"
+	CertStatusRevoked = "revoked"
+	CertStatusExpired = "expired"
+)
+
+// EffectiveStatus is the status to show and filter on. Nothing ever writes
+// "expired" to the database -- a certificate simply passes its NotAfter
+// time -- so an "active" row past that point is reported as "expired"
+// here, at read time, rather than relying on a background job to flip the
+// stored value. Revoked stays revoked even after it also expires: that's
+// the more important fact about it.
+func (c *Certificate) EffectiveStatus(now time.Time) string {
+	if c.Status == CertStatusActive && !now.Before(c.NotAfter) {
+		return CertStatusExpired
+	}
+	return c.Status
+}
+
 type AuditEvent struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CertID    string    `gorm:"index" json:"cert_id"`
