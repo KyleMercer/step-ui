@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { certificateApi, Certificate } from '@/lib/api'
-import { formatDate, getDaysUntilExpiry, getExpiryStatus } from '@/lib/utils'
+import { formatDate, formatDaysLeft, getDaysUntilExpiry, getExpiryStatus } from '@/lib/utils'
 import { Shield, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
@@ -25,17 +25,14 @@ export default function Dashboard() {
       const certs = response.certificates || []
       setCertificates(certs)
 
-      // Calculate stats
-      const now = new Date()
+      // Calculate stats. Status comes from the backend, which reports an
+      // active certificate past its expiry time as "expired". Revoked
+      // certificates count in none of these three.
       const expiring = certs.filter((cert: Certificate) => {
-        const days = getDaysUntilExpiry(cert.not_after)
-        return days > 0 && days <= 30
+        return cert.status === 'active' && getDaysUntilExpiry(cert.not_after) <= 30
       }).length
 
-      const expired = certs.filter((cert: Certificate) => {
-        const days = getDaysUntilExpiry(cert.not_after)
-        return days <= 0
-      }).length
+      const expired = certs.filter((cert: Certificate) => cert.status === 'expired').length
 
       const active = certs.filter((cert: Certificate) => cert.status === 'active').length
 
@@ -77,7 +74,7 @@ export default function Dashboard() {
       case 'warning':
         return 'text-yellow-600'
       case 'expired':
-        return 'text-gray-500'
+        return 'text-red-700 font-semibold'
       default:
         return 'text-green-600'
     }
@@ -234,7 +231,7 @@ export default function Dashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`text-sm font-medium ${getExpiryColor(cert.not_after)}`}>
-                        {getDaysUntilExpiry(cert.not_after)} days
+                        {formatDaysLeft(cert.not_after)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

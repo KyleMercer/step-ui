@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { certificateApi, Certificate } from '@/lib/api'
-import { formatDate, getDaysUntilExpiry, getExpiryStatus, downloadBase64File } from '@/lib/utils'
+import { formatDate, formatDaysLeft, getExpiryStatus, downloadBase64File } from '@/lib/utils'
 import { Shield, AlertTriangle, CheckCircle, Clock, Search, Filter, Download, RotateCcw, X, Copy } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
@@ -96,7 +96,7 @@ export default function Inventory() {
       case 'warning':
         return 'text-yellow-600 bg-yellow-50'
       case 'expired':
-        return 'text-gray-500 bg-gray-50'
+        return 'text-red-700 bg-red-100 font-semibold'
       default:
         return 'text-green-600 bg-green-50'
     }
@@ -242,7 +242,7 @@ export default function Inventory() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getExpiryColor(cert.not_after)}`}>
-                        {getDaysUntilExpiry(cert.not_after)} days
+                        {formatDaysLeft(cert.not_after)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

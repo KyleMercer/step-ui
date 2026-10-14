@@ -3,6 +3,7 @@ package db
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -46,7 +47,21 @@ func (d *Database) ListCertificates(limit, offset int, status string) ([]Certifi
 	var certs []Certificate
 	query := d.DB.Order("created_at DESC")
 
-	if status != "" {
+	// "active" and "expired" are filtered on the effective status (see
+	// Certificate.EffectiveStatus), not just the stored column -- otherwise
+	// filtering for expired would find nothing, and active would include
+	// certificates that have already expired. julianday() compares the
+	// actual instants: the stored timestamps are text with a UTC offset, so
+	// a plain string comparison would go wrong whenever the stored offset
+	// and the container's local offset differ.
+	now := time.Now()
+	switch status {
+	case "":
+	case CertStatusActive:
+		query = query.Where("status = ? AND julianday(not_after) > julianday(?)", CertStatusActive, now)
+	case CertStatusExpired:
+		query = query.Where("status = ? OR (status = ? AND julianday(not_after) <= julianday(?))", CertStatusExpired, CertStatusActive, now)
+	default:
 		query = query.Where("status = ?", status)
 	}
 

@@ -23,9 +23,30 @@ export function getDaysUntilExpiry(notAfter: string) {
   return diffDays
 }
 
-export function getExpiryStatus(notAfter: string) {
+export function isExpired(notAfter: string) {
+  return new Date(notAfter).getTime() <= Date.now()
+}
+
+// Text for the "Days Left" column. Past the expiry time it says how long
+// ago instead of showing a negative day count.
+export function formatDaysLeft(notAfter: string) {
+  if (isExpired(notAfter)) {
+    const daysAgo = Math.floor((Date.now() - new Date(notAfter).getTime()) / (1000 * 60 * 60 * 24))
+    if (daysAgo === 0) return 'Expired today'
+    return `Expired ${daysAgo} ${daysAgo === 1 ? 'day' : 'days'} ago`
+  }
+  // Under a full day left would otherwise round up to "1 day".
+  if (new Date(notAfter).getTime() - Date.now() < 1000 * 60 * 60 * 24) return 'Under 1 day'
   const days = getDaysUntilExpiry(notAfter)
-  if (days < 0) return 'expired'
+  return `${days} days`
+}
+
+export function getExpiryStatus(notAfter: string) {
+  // Based on the actual expiry time, not the rounded day count -- a
+  // certificate that expired an hour ago rounds to "0 days" and would
+  // otherwise still be shown as merely critical.
+  if (isExpired(notAfter)) return 'expired'
+  const days = getDaysUntilExpiry(notAfter)
   if (days <= 7) return 'critical'
   if (days <= 30) return 'warning'
   return 'good'
