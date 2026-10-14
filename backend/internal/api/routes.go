@@ -16,6 +16,16 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string) {
 	// Health check (intentionally not behind auth)
 	r.GET("/health", handlers.Health)
 
+	// OIDC single sign-on. These two are deliberately NOT behind
+	// RequireBearerToken: they're full-page browser navigations (a plain
+	// link to /login, then the identity provider's redirect back to
+	// /callback), and a browser navigation can't carry an Authorization
+	// header. Their protection is the OIDC flow itself -- one-time state
+	// bound to the browser by cookie, PKCE, a nonce, and a signature check
+	// on the ID token. Both answer 404 when SSO isn't configured.
+	r.GET("/api/auth/oidc/login", handlers.OIDCLogin)
+	r.GET("/api/auth/oidc/callback", handlers.OIDCCallback)
+
 	api := r.Group("/api")
 	api.Use(RequireBearerToken(authToken))
 	{
@@ -25,6 +35,9 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string) {
 		// Logout is safe to call with no session at all (it just no-ops),
 		// so it doesn't need RequireSession either.
 		api.POST("/auth/logout", handlers.Logout)
+		// Which sign-in options the login page should show (needs no
+		// session -- nobody is signed in yet when it's asked).
+		api.GET("/auth/config", handlers.AuthConfig)
 
 		// Everything else requires an actual logged-in account.
 		loggedIn := api.Group("")

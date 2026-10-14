@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -36,6 +37,42 @@ type Config struct {
 	// env vars are never consulted again; changing them later does nothing.
 	InitialAdminUsername string
 	InitialAdminPassword string
+
+	// OIDC single sign-on (e.g. Authentik). Entirely optional: SSO is
+	// switched on only when OIDCIssuerURL, OIDCClientID, OIDCClientSecret
+	// and OIDCRedirectURL are all set. Local username/password login keeps
+	// working either way, as a break-glass path for when the identity
+	// provider is down. See the "Single sign-on" section of the README.
+	OIDCIssuerURL    string
+	OIDCClientID     string
+	OIDCClientSecret string
+	// OIDCRedirectURL is the backend's own callback, as the BROWSER reaches
+	// it (through any reverse proxy) -- e.g.
+	// https://step-ui-api.example.com/api/auth/oidc/callback. Must match the
+	// redirect URI registered at the identity provider exactly.
+	OIDCRedirectURL string
+	// Groups claim values that grant each role. Admin wins if a user is in
+	// both. Someone in neither group is refused, even if the identity
+	// provider let them through.
+	OIDCAdminGroup  string
+	OIDCViewerGroup string
+	OIDCGroupsClaim string
+	// OIDCUsernameClaim picks the claim used as the step-ui username
+	// (falls back to email, then sub, if the claim is missing).
+	OIDCUsernameClaim string
+	OIDCScopes        []string
+	// OIDCProviderName is only a label, for the login button.
+	OIDCProviderName string
+	// OIDCCAFile optionally names a PEM file of extra CA certificates to
+	// trust when the backend talks to the identity provider -- only needed
+	// if the provider's certificate isn't publicly trusted (e.g. issued by
+	// your own step-ca). The container's normal trust store is still used.
+	OIDCCAFile string
+}
+
+// OIDCEnabled reports whether enough OIDC settings are present to offer SSO.
+func (c *Config) OIDCEnabled() bool {
+	return c.OIDCIssuerURL != "" && c.OIDCClientID != "" && c.OIDCClientSecret != "" && c.OIDCRedirectURL != ""
 }
 
 func Load() *Config {
@@ -52,6 +89,18 @@ func Load() *Config {
 		CORSAllowedOrigin:    getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
 		InitialAdminUsername: getEnv("INITIAL_ADMIN_USERNAME", ""),
 		InitialAdminPassword: getEnv("INITIAL_ADMIN_PASSWORD", ""),
+
+		OIDCIssuerURL:     getEnv("OIDC_ISSUER_URL", ""),
+		OIDCClientID:      getEnv("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:  getEnv("OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:   getEnv("OIDC_REDIRECT_URL", ""),
+		OIDCAdminGroup:    getEnv("OIDC_ADMIN_GROUP", ""),
+		OIDCViewerGroup:   getEnv("OIDC_VIEWER_GROUP", ""),
+		OIDCGroupsClaim:   getEnv("OIDC_GROUPS_CLAIM", "groups"),
+		OIDCUsernameClaim: getEnv("OIDC_USERNAME_CLAIM", "preferred_username"),
+		OIDCScopes:        strings.Fields(strings.ReplaceAll(getEnv("OIDC_SCOPES", "openid profile email"), ",", " ")),
+		OIDCProviderName:  getEnv("OIDC_PROVIDER_NAME", "SSO"),
+		OIDCCAFile:        getEnv("OIDC_CA_FILE", ""),
 	}
 }
 

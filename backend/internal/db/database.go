@@ -126,6 +126,24 @@ func (d *Database) CountUsersByRole(role Role) (int64, error) {
 	return count, err
 }
 
+// CountLocalAdmins counts admin accounts that can sign in with a password.
+// Used to keep at least one break-glass admin that doesn't depend on the
+// identity provider being up. Rows with a blank auth_source predate SSO
+// support and are local.
+func (d *Database) CountLocalAdmins() (int64, error) {
+	var count int64
+	err := d.DB.Model(&User{}).
+		Where("role = ? AND (auth_source = ? OR auth_source = '' OR auth_source IS NULL)", RoleAdmin, AuthSourceLocal).
+		Count(&count).Error
+	return count, err
+}
+
+func (d *Database) GetUserByOIDCSubject(subject string) (*User, error) {
+	var user User
+	err := d.DB.Where("oidc_subject = ?", subject).First(&user).Error
+	return &user, err
+}
+
 func (d *Database) UpdateUser(user *User) error {
 	return d.DB.Save(user).Error
 }

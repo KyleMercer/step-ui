@@ -17,14 +17,49 @@ type LoginRequest struct {
 }
 
 type UserResponse struct {
-	ID        uint      `json:"id"`
-	Username  string    `json:"username"`
-	Role      db.Role   `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         uint          `json:"id"`
+	Username   string        `json:"username"`
+	Role       db.Role       `json:"role"`
+	AuthSource db.AuthSource `json:"auth_source"`
+	CreatedAt  time.Time     `json:"created_at"`
+}
+
+func authSourceOf(u *db.User) db.AuthSource {
+	if u.IsLocal() {
+		return db.AuthSourceLocal
+	}
+	return db.AuthSourceOIDC
 }
 
 func toUserResponse(u db.User) UserResponse {
-	return UserResponse{ID: u.ID, Username: u.Username, Role: u.Role, CreatedAt: u.CreatedAt}
+	return UserResponse{ID: u.ID, Username: u.Username, Role: u.Role, AuthSource: authSourceOf(&u), CreatedAt: u.CreatedAt}
+}
+
+// startSession creates a session for user and sets its cookie. Shared by
+// password login and the OIDC callback, so both produce exactly the same
+// kind of session.
+func (h *Handlers) startSession(c *gin.Context, user *db.User) error {
+	token, err := auth.GenerateSessionToken()
+	if err != nil {
+		return err
+	}
+
+	session := &db.Session{
+		Token:     token,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(SessionDuration),
+		CreatedAt: time.Now(),
+	}
+	if err := h.db.CreateSession(session); err != nil {
+		return err
+	}
+
+	// domain "" = host-only cookie bound to whatever host issued it, which
+	// is what lets this same cookie flow to both the frontend's origin and
+	// the backend's own port -- see the CORS comment in middleware.go for
+	// the other half of making that work. secure=false: see SessionCookieName.
+	c.SetCookie(SessionCookieName, token, int(SessionDuration.Seconds()), "/", "", false, true)
+	return nil
 }
 
 // actorName returns the logged-in username for audit/ownership logging, or
@@ -58,35 +93,26 @@ func (h *Handlers) Login(c *gin.Context) {
 		return
 	}
 
+	// SSO accounts have no password and can only sign in through the
+	// identity provider. Same generic error and same bcrypt cost as an
+	// unknown username, so this can't be used to discover SSO usernames.
+	if !user.IsLocal() {
+		auth.CheckPassword(auth.DummyPasswordHash, req.Password)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		return
+	}
+
 	if !auth.CheckPassword(user.PasswordHash, req.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 
-	token, err := auth.GenerateSessionToken()
-	if err != nil {
+	if err := h.startSession(c, user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
 
-	session := &db.Session{
-		Token:     token,
-		UserID:    user.ID,
-		ExpiresAt: time.Now().Add(SessionDuration),
-		CreatedAt: time.Now(),
-	}
-	if err := h.db.CreateSession(session); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
-		return
-	}
-
-	// domain "" = host-only cookie bound to whatever host issued it, which
-	// is what lets this same cookie flow to both the frontend's origin and
-	// the backend's own port -- see the CORS comment in middleware.go for
-	// the other half of making that work. secure=false: see SessionCookieName.
-	c.SetCookie(SessionCookieName, token, int(SessionDuration.Seconds()), "/", "", false, true)
-
-	c.JSON(http.StatusOK, gin.H{"username": user.Username, "role": user.Role})
+	c.JSON(http.StatusOK, gin.H{"username": user.Username, "role": user.Role, "auth_source": db.AuthSourceLocal})
 }
 
 // Logout deletes the session (if any) and clears the cookie. Safe to call
@@ -111,7 +137,7 @@ func (h *Handlers) Me(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not logged in"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"username": user.Username, "role": user.Role})
+	c.JSON(http.StatusOK, gin.H{"username": user.Username, "role": user.Role, "auth_source": authSourceOf(user)})
 }
 
 // ListUsers is admin-only (see routes.go) -- lets an admin see and manage
@@ -162,6 +188,7 @@ func (h *Handlers) CreateUser(c *gin.Context) {
 		Username:     req.Username,
 		PasswordHash: hash,
 		Role:         req.Role,
+		AuthSource:   db.AuthSourceLocal,
 	}
 	if err := h.db.CreateUser(user); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
@@ -195,19 +222,27 @@ func (h *Handlers) UpdateUser(c *gin.Context) {
 		return
 	}
 
+	// SSO accounts are managed at the identity provider: their role is
+	// re-derived from group membership at every sign-in (so a change here
+	// would be silently undone), and they have no password to change.
+	if !user.IsLocal() && (req.Password != "" || (req.Role != "" && req.Role != user.Role)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "this account signs in through SSO -- change its role with identity-provider groups; it has no password here"})
+		return
+	}
+
 	if req.Role != "" && req.Role != user.Role {
 		if req.Role != db.RoleAdmin && req.Role != db.RoleViewer {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "role must be admin or viewer"})
 			return
 		}
-		// Don't allow demoting the last remaining admin -- that would lock
-		// everyone out of both user management and every mutating
-		// certificate operation, with no way back in except direct
-		// database surgery.
+		// Don't allow demoting the last remaining local admin -- that
+		// would leave no admin able to sign in when the identity provider
+		// is down (or isn't configured at all), with no way back in
+		// except direct database surgery.
 		if user.Role == db.RoleAdmin {
-			admins, err := h.db.CountUsersByRole(db.RoleAdmin)
+			admins, err := h.db.CountLocalAdmins()
 			if err == nil && admins <= 1 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "cannot demote the last remaining admin"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "cannot demote the last remaining local admin"})
 				return
 			}
 		}
@@ -257,10 +292,14 @@ func (h *Handlers) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if user.Role == db.RoleAdmin {
-		admins, err := h.db.CountUsersByRole(db.RoleAdmin)
+	// Keep at least one local (password) admin as a break-glass account
+	// for when the identity provider is down. SSO admins can always be
+	// deleted -- if they're still in the admin group, their account is
+	// simply recreated at their next sign-in.
+	if user.Role == db.RoleAdmin && user.IsLocal() {
+		admins, err := h.db.CountLocalAdmins()
 		if err == nil && admins <= 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete the last remaining admin"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete the last remaining local admin"})
 			return
 		}
 	}

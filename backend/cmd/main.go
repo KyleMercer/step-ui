@@ -51,6 +51,7 @@ func main() {
 				Username:     cfg.InitialAdminUsername,
 				PasswordHash: hash,
 				Role:         db.RoleAdmin,
+				AuthSource:   db.AuthSourceLocal,
 			}
 			if err := database.CreateUser(admin); err != nil {
 				log.Printf("WARNING: failed to create initial admin account %q: %v", cfg.InitialAdminUsername, err)
@@ -70,6 +71,25 @@ func main() {
 
 	// Initialize handlers
 	handlers := api.NewHandlers(database, stepClient)
+
+	// Optional OIDC single sign-on (e.g. Authentik). A problem here never
+	// stops the backend: local login keeps working regardless.
+	if cfg.OIDCEnabled() {
+		oidcAuth, err := api.NewOIDCAuth(cfg, cfg.CORSAllowedOrigin)
+		if err != nil {
+			log.Printf("WARNING: SSO disabled: %v", err)
+		} else {
+			handlers.EnableOIDC(oidcAuth)
+			log.Printf("SSO enabled: issuer=%s, redirect=%s, admin group=%q, viewer group=%q",
+				cfg.OIDCIssuerURL, cfg.OIDCRedirectURL, cfg.OIDCAdminGroup, cfg.OIDCViewerGroup)
+			if cfg.OIDCAdminGroup == "" && cfg.OIDCViewerGroup == "" {
+				log.Println("WARNING: neither OIDC_ADMIN_GROUP nor OIDC_VIEWER_GROUP is set -- every SSO sign-in will be refused until at least one is.")
+			}
+			go oidcAuth.Probe()
+		}
+	} else if cfg.OIDCIssuerURL != "" || cfg.OIDCClientID != "" {
+		log.Println("WARNING: some OIDC_* settings are set but not all of OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL -- SSO stays off.")
+	}
 
 	if cfg.APIAuthToken == "" {
 		log.Println("WARNING: API_AUTH_TOKEN is not set -- the API is unauthenticated. Anyone who can reach it can issue, sign, and revoke certificates. Set API_AUTH_TOKEN in your .env to require a bearer token.")

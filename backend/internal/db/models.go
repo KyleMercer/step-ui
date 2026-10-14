@@ -46,13 +46,37 @@ const (
 	RoleViewer Role = "viewer"
 )
 
+// AuthSource records how an account signs in. Local accounts have a
+// password stored here; OIDC accounts are created automatically the first
+// time someone signs in through the configured identity provider (e.g.
+// Authentik), have no password at all, and get their role re-derived from
+// their identity-provider groups on every sign-in.
+type AuthSource string
+
+const (
+	AuthSourceLocal AuthSource = "local"
+	AuthSourceOIDC  AuthSource = "oidc"
+)
+
 type User struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Username     string    `gorm:"uniqueIndex" json:"username"`
-	PasswordHash string    `json:"-"` // bcrypt; never serialized back to a client
-	Role         Role      `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	Username     string     `gorm:"uniqueIndex" json:"username"`
+	PasswordHash string     `json:"-"` // bcrypt; never serialized back to a client. Empty for OIDC accounts.
+	Role         Role       `json:"role"`
+	AuthSource   AuthSource `gorm:"default:local" json:"auth_source"`
+	// OIDCSubject is the identity provider's stable "sub" claim -- the real
+	// identity key for an OIDC account. Usernames can be renamed on the
+	// provider side; "sub" never changes. Pointer so local accounts store
+	// NULL, which SQLite's unique index allows any number of.
+	OIDCSubject *string   `gorm:"column:oidc_subject;uniqueIndex:idx_users_oidc_subject" json:"-"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// IsLocal treats a blank AuthSource as local too -- accounts created before
+// the column existed are all local, whatever the migration filled in.
+func (u *User) IsLocal() bool {
+	return u.AuthSource != AuthSourceOIDC
 }
 
 // Session is an opaque server-side session record, not a JWT -- the token

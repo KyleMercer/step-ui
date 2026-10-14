@@ -44,17 +44,34 @@ export interface Certificate {
 
 export type Role = 'admin' | 'viewer'
 
+// 'local' = username/password stored in step-ui. 'oidc' = signs in through
+// the identity provider (e.g. Authentik); created automatically at first
+// sign-in, no password here, role comes from identity-provider groups.
+export type AuthSource = 'local' | 'oidc'
+
 export interface AuthUser {
   username: string
   role: Role
+  auth_source?: AuthSource
 }
 
 export interface UserAccount {
   id: number
   username: string
   role: Role
+  auth_source: AuthSource
   created_at: string
 }
+
+export interface AuthConfig {
+  oidc_enabled: boolean
+  oidc_provider_name: string
+}
+
+// SSO sign-in is a full-page navigation to the backend (which then
+// redirects to the identity provider), not an XHR -- so this is just a
+// URL for a plain link, not an axios call.
+export const oidcLoginUrl = `${API_URL}/api/auth/oidc/login`
 
 export interface IssueRequest {
   cn: string
@@ -167,6 +184,12 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     await api.post('/api/auth/logout')
+  },
+
+  // Which sign-in options to offer (works without a session)
+  config: async (): Promise<AuthConfig> => {
+    const response = await api.get('/api/auth/config')
+    return response.data
   },
 
   me: async (): Promise<AuthUser> => {

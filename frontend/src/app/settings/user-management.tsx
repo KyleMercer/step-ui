@@ -83,7 +83,11 @@ export default function UserManagement() {
   }
 
   const handleDelete = async (targetUser: UserAccount) => {
-    if (!confirm(`Delete account "${targetUser.username}"? This can't be undone.`)) {
+    const prompt =
+      targetUser.auth_source === 'oidc'
+        ? `Delete SSO account "${targetUser.username}"? This signs them out. If they're still in an allowed group at the identity provider, the account is recreated at their next sign-in -- remove them from the group there to block access.`
+        : `Delete account "${targetUser.username}"? This can't be undone.`
+    if (!confirm(prompt)) {
       return
     }
     try {
@@ -129,7 +133,9 @@ export default function UserManagement() {
         <h2 className="text-lg font-medium text-gray-900">User Accounts</h2>
         <p className="mt-1 text-sm text-gray-500">
           Admins can do everything below; viewers can view certificates and CA settings but
-          can&apos;t issue, sign, renew, revoke, or manage accounts.
+          can&apos;t issue, sign, renew, revoke, or manage accounts. Accounts marked SSO sign in
+          through the identity provider: they&apos;re created at first sign-in and their role
+          follows their identity-provider groups, so it can&apos;t be changed here.
         </p>
       </div>
 
@@ -164,17 +170,25 @@ export default function UserManagement() {
                 // an id -- usernames are unique, so this is an equally
                 // reliable way to spot "this row is me".
                 const isSelf = u.username === currentUser?.username
+                const isSso = u.auth_source === 'oidc'
                 return (
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {u.username}
+                      {isSso && (
+                        <span className="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700">
+                          SSO
+                        </span>
+                      )}
                       {isSelf && <span className="ml-2 text-xs text-gray-400">(you)</span>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <select
                         value={u.role}
                         onChange={(e) => handleRoleChange(u, e.target.value as Role)}
-                        className="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        disabled={isSso}
+                        title={isSso ? 'Set by identity-provider group membership at each sign-in' : undefined}
+                        className="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
                       >
                         <option value="admin">admin</option>
                         <option value="viewer">viewer</option>
@@ -187,8 +201,9 @@ export default function UserManagement() {
                       <div className="flex space-x-3">
                         <button
                           onClick={() => setResetTarget(u)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Change password"
+                          disabled={isSso}
+                          className="text-blue-600 hover:text-blue-900 disabled:text-gray-300 disabled:cursor-not-allowed"
+                          title={isSso ? 'SSO accounts have no step-ui password' : 'Change password'}
                         >
                           <KeyRound className="h-4 w-4" />
                         </button>

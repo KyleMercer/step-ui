@@ -20,6 +20,8 @@ unsuitable for production use in a business/enterprise environment.
 - Certificate inventory management
 - Download certificates in various formats (PEM, PFX)
 - Audit logging
+- User accounts with admin/viewer roles
+- Optional OIDC single sign-on (tested with Authentik), with local login kept as a fallback
 - Modern, responsive UI
 
 ## Prerequisites
@@ -149,13 +151,110 @@ idle timeout (it's a flat expiry from login, not extended by activity).
 Logging out, changing a user's password, or deleting a user account all
 immediately invalidate any session tied to that account -- there's nothing
 client-side to expire, the session is just gone from the backend's
-database. The last remaining admin account can't be demoted to viewer or
-deleted, so there's no way to lock yourself out entirely once at least one
-admin exists.
+database. The last remaining **local** (password) admin account can't be
+demoted to viewer or deleted, so there's always a way in -- even when
+single sign-on is configured but the identity provider is down.
 
 This layers on top of `API_AUTH_TOKEN` (see Security Notes below), it
 doesn't replace it -- that token is a separate container-to-container
 shared secret between the frontend and backend, unrelated to user logins.
+
+## Single Sign-On (OIDC)
+
+step-ui can sign people in through any OpenID Connect provider. It's built
+and tested against **Authentik**; Keycloak, Authelia, Zitadel and similar
+should work the same way. SSO is optional and off until configured, and the
+local username/password form always stays on the login page as a
+break-glass path.
+
+**How it works:** the login page shows a "Sign in with ..." button. The
+backend runs a standard authorization-code flow with PKCE as a confidential
+client (the client secret never reaches the browser), verifies the ID
+token, and then starts an ordinary step-ui session -- the same cookie a
+password login produces.
+
+- **Accounts are created automatically** at a person's first SSO sign-in.
+  They show in Settings → User Accounts marked **SSO**. They have no
+  password in step-ui and can't use the password form.
+- **Roles come from groups**, re-read at every sign-in: membership in
+  `OIDC_ADMIN_GROUP` gives admin, `OIDC_VIEWER_GROUP` gives viewer (admin
+  wins if both). Anyone in neither group is refused, even if the provider
+  let them through. An SSO account's role can't be edited in step-ui --
+  change the person's groups at the provider; it applies at their next
+  sign-in.
+- **No account takeover by name:** an SSO identity is matched by the
+  provider's stable `sub` claim, never by username. If an SSO username
+  matches an existing step-ui account (for example a local `admin`), the
+  sign-in is refused and logged rather than merged.
+- **Signing out** of step-ui ends only the step-ui session; you stay signed
+  in to the provider and its other apps.
+- **Deleting an SSO account** ends its sessions, but if the person is still
+  in an allowed group the account is recreated at their next sign-in. To
+  remove access, remove them from the group at the provider.
+
+### Authentik setup
+
+1. **Groups:** create `stepui-admins` and `stepui-viewers` (any names;
+   they must match the env vars exactly, case included) and add people.
+2. **Provider:** Applications → Providers → Create → *OAuth2/OpenID
+   Provider*.
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Client type: **Confidential**. Note the Client ID and Client Secret.
+   - Redirect URI: one entry, **Strict**, set to the backend's callback as
+     the browser reaches it, e.g.
+     `https://step-ui-api.example.com:8443/api/auth/oidc/callback`
+   - Signing key: *authentik Self-signed Certificate* (any RSA key -- don't
+     leave it blank).
+   - Scopes: keep the defaults (`openid`, `profile`, `email`). Authentik's
+     default `profile` mapping already includes a `groups` claim.
+3. **Application:** Applications → Create, slug e.g. `step-ui`, linked to
+   the provider. Optionally bind `stepui-admins` and `stepui-viewers` on
+   its *Policy / Group / User Bindings* tab so Authentik itself refuses
+   everyone else before they ever reach step-ui.
+4. **step-ui backend environment:**
+
+```
+OIDC_ISSUER_URL=https://authentik.example.com/application/o/step-ui/
+OIDC_CLIENT_ID=<client id>
+OIDC_CLIENT_SECRET=<client secret>
+OIDC_REDIRECT_URL=https://step-ui-api.example.com:8443/api/auth/oidc/callback
+OIDC_ADMIN_GROUP=stepui-admins
+OIDC_VIEWER_GROUP=stepui-viewers
+OIDC_PROVIDER_NAME=Authentik
+```
+
+The issuer URL must match Authentik's exactly, **including the trailing
+slash** (it's shown on the provider's overview page as "OpenID
+Configuration Issuer"). `CORS_ALLOWED_ORIGIN` must be the frontend's real
+browser-facing origin, because that's where the backend sends people after
+signing in (and back to `/login` with an error message if it fails).
+Recreate the backend container; no rebuild needed, and the frontend needs no
+changes.
+
+**Network requirements:** the backend container itself talks to the
+provider (discovery, signing keys, code exchange), so it must be able to
+resolve and reach the provider's hostname and trust its certificate. A
+publicly trusted certificate works out of the box. If the provider's
+certificate comes from your own CA (e.g. step-ca), mount that root into the
+backend container and point `OIDC_CA_FILE` at it.
+
+**Troubleshooting:** failures land back on the login page with a short
+message; the real reason is in the backend log (lines start with `OIDC:`).
+At startup the backend logs either `OIDC provider discovered` or a warning
+explaining why discovery failed -- it retries at the next sign-in, and local
+login is never affected.
+
+| Login page says | Usual cause |
+|---|---|
+| Couldn't reach the identity provider | Backend can't resolve/reach/trust the issuer, or the issuer URL doesn't match exactly (check the trailing slash) |
+| Not in a group that's allowed | User isn't in either group, or group names differ (case-sensitive). The log lists the groups the provider sent |
+| Identity provider refused the sign-in | Authentik's application binding doesn't include the user |
+| Sign-in could not be verified / expired | Took more than 10 minutes, backend restarted mid-sign-in, or the browser blocked cookies for the backend's hostname |
+| Username matches an existing account | Rename or delete the conflicting local account, or set `OIDC_USERNAME_CLAIM=email` |
+
+Authentik's own errors (e.g. `redirect_uri` mismatch) appear on Authentik's
+page instead: the redirect URI there must equal `OIDC_REDIRECT_URL`
+character for character (scheme, host, port, no trailing slash).
 
 ## Build Versioning
 
