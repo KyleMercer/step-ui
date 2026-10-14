@@ -36,6 +36,12 @@ type Config struct {
 	// env vars are never consulted again; changing them later does nothing.
 	InitialAdminUsername string
 	InitialAdminPassword string
+
+	// SettingsKeyFile optionally names the file holding the key that
+	// encrypts secrets in the settings store (e.g. a Docker secret at
+	// /run/secrets/step_ui_settings_key). Empty = a key file created
+	// automatically next to the database. See internal/settings.
+	SettingsKeyFile string
 }
 
 func Load() *Config {
@@ -52,6 +58,7 @@ func Load() *Config {
 		CORSAllowedOrigin:    getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
 		InitialAdminUsername: getEnv("INITIAL_ADMIN_USERNAME", ""),
 		InitialAdminPassword: getEnv("INITIAL_ADMIN_PASSWORD", ""),
+		SettingsKeyFile:      getEnv("SETTINGS_KEY_FILE", ""),
 	}
 }
 

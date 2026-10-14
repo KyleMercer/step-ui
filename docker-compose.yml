@@ -26,6 +26,7 @@ services:
       - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
       - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-}
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
+      - SETTINGS_KEY_FILE=${SETTINGS_KEY_FILE:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
