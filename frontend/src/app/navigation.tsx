@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield, FileText, List, Settings, Home, LogOut } from 'lucide-react'
+import { Shield, FileText, List, Settings, Home, LogOut, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNavigationGuardMessage } from '@/lib/navigation-guard'
 import { useAuth } from '@/lib/auth-context'
@@ -12,6 +12,8 @@ const navigation = [
   { name: 'Issue Certificate', href: '/issue', icon: Shield, adminOnly: true },
   { name: 'Sign CSR', href: '/sign-csr', icon: FileText, adminOnly: true },
   { name: 'Inventory', href: '/inventory', icon: List },
+  // Expiry alerts feature (app/alerts) -- remove this line with the feature.
+  { name: 'Alerts', href: '/alerts', icon: Bell },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

@@ -38,6 +38,12 @@ type Config struct {
 	InitialAdminUsername string
 	InitialAdminPassword string
 
+	// SettingsKeyFile optionally names the file holding the key that
+	// encrypts secrets in the settings store (e.g. a Docker secret at
+	// /run/secrets/step_ui_settings_key). Empty = a key file created
+	// automatically next to the database. See internal/settings.
+	SettingsKeyFile string
+
 	// OIDC single sign-on (e.g. Authentik). Entirely optional: SSO is
 	// switched on only when OIDCIssuerURL, OIDCClientID, OIDCClientSecret
 	// and OIDCRedirectURL are all set. Local username/password login keeps
@@ -89,6 +95,7 @@ func Load() *Config {
 		CORSAllowedOrigin:    getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
 		InitialAdminUsername: getEnv("INITIAL_ADMIN_USERNAME", ""),
 		InitialAdminPassword: getEnv("INITIAL_ADMIN_PASSWORD", ""),
+		SettingsKeyFile:      getEnv("SETTINGS_KEY_FILE", ""),
 
 		OIDCIssuerURL:     getEnv("OIDC_ISSUER_URL", ""),
 		OIDCClientID:      getEnv("OIDC_CLIENT_ID", ""),

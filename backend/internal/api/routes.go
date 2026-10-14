@@ -12,7 +12,13 @@ import (
 // containers (see API_AUTH_TOKEN in example.env), while sessions identify
 // an actual logged-in person. /health is deliberately left open behind
 // neither, so container/orchestrator healthchecks don't need either one.
-func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string) {
+// RouteExtension lets a self-contained feature package (e.g. alerts) add
+// its own routes without this file knowing about it: loggedIn already
+// requires a session, admin additionally requires the admin role. A
+// feature removed from cmd/main.go simply stops being registered.
+type RouteExtension func(loggedIn, admin *gin.RouterGroup)
+
+func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string, extensions ...RouteExtension) {
 	// Health check (intentionally not behind auth)
 	r.GET("/health", handlers.Health)
 
@@ -67,6 +73,13 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string) {
 				admin.POST("/users", handlers.CreateUser)
 				admin.PUT("/users/:id", handlers.UpdateUser)
 				admin.DELETE("/users/:id", handlers.DeleteUser)
+			}
+
+			// Optional feature packages (see RouteExtension).
+			featureAdmin := loggedIn.Group("")
+			featureAdmin.Use(RequireRole(db.RoleAdmin))
+			for _, ext := range extensions {
+				ext(loggedIn, featureAdmin)
 			}
 		}
 	}

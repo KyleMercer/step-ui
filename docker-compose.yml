@@ -34,6 +34,7 @@ services:
       - OIDC_VIEWER_GROUP=${OIDC_VIEWER_GROUP:-}
       - OIDC_PROVIDER_NAME=${OIDC_PROVIDER_NAME:-}
       - OIDC_CA_FILE=${OIDC_CA_FILE:-}
+      - SETTINGS_KEY_FILE=${SETTINGS_KEY_FILE:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

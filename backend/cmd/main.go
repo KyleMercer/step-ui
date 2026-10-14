@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 
+	"step-ca-webui/internal/alerts"
 	"step-ca-webui/internal/api"
 	"step-ca-webui/internal/auth"
 	"step-ca-webui/internal/config"
 	"step-ca-webui/internal/db"
+	"step-ca-webui/internal/settings"
 	"step-ca-webui/internal/step"
 
 	"github.com/gin-gonic/gin"
@@ -103,9 +107,28 @@ func main() {
 	// website's client-side JS call this API from a visitor's browser.
 	r.Use(api.CORS(cfg.CORSAllowedOrigin))
 
+	// Settings store: runtime configuration edited from the web UI, with
+	// secrets encrypted at rest (see internal/settings).
+	var extensions []api.RouteExtension
+	store, err := settings.Open(database.DB, cfg.SettingsKeyFile, filepath.Dir(cfg.DBPath))
+	if err != nil {
+		log.Printf("WARNING: settings store unavailable, so features configured from the UI (expiry alerts) are disabled: %v", err)
+	} else {
+		log.Printf("Settings store ready (encryption key: %s)", store.KeySource())
+
+		// Expiry alerts -- self-contained feature, switched on and
+		// configured from its own page in the UI.
+		if alertSvc, err := alerts.New(database, store, cfg.CAURL, cfg.CARootFingerprint, cfg.CORSAllowedOrigin); err != nil {
+			log.Printf("WARNING: expiry alerts disabled: %v", err)
+		} else {
+			alertSvc.Start(context.Background())
+			extensions = append(extensions, alertSvc.Routes())
+		}
+	}
+
 	// Setup routes (authToken == "" leaves /api/* unauthenticated, matching
 	// the previous behavior, but see the warning logged above)
-	api.SetupRoutes(r, handlers, cfg.APIAuthToken)
+	api.SetupRoutes(r, handlers, cfg.APIAuthToken, extensions...)
 
 	// Start server
 	log.Printf("Starting server on port %d", cfg.Port)

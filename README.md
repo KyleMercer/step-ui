@@ -22,6 +22,7 @@ unsuitable for production use in a business/enterprise environment.
 - Audit logging
 - User accounts with admin/viewer roles
 - Optional OIDC single sign-on (tested with Authentik), with local login kept as a fallback
+- Expiry alerts by Pushover, MQTT, webhook (JSON, ntfy, Discord) or email, configured from the web UI
 - Modern, responsive UI
 
 ## Prerequisites
@@ -255,6 +256,67 @@ login is never affected.
 Authentik's own errors (e.g. `redirect_uri` mismatch) appear on Authentik's
 page instead: the redirect URI there must equal `OIDC_REDIRECT_URL`
 character for character (scheme, host, port, no trailing slash).
+## Expiry Alerts
+
+step-ui can warn you before certificates expire, and again when they do,
+instead of you finding out from a dashboard (or a broken service). It's off
+until an admin turns it on from the **Alerts** page; everything is set up
+there, with no environment variables or restarts.
+
+**What gets sent, and when:**
+- One alert as each active certificate reaches each threshold -- 30, 7 and
+  1 day(s) before expiry by default (editable) -- and one when it expires.
+  Each alert goes out once. Renewing a certificate gives it a new expiry
+  date, so its warnings start over. Revoked certificates are ignored.
+- Turning alerts on late doesn't flood you: a certificate already 3 days
+  from expiry gets the 7-day alert only, not the 30-day one too.
+- Certificates are checked every hour. Everything due in one check is
+  combined into one message per destination.
+- If every destination fails, nothing is marked as sent and the next check
+  tries again. If at least one succeeds, the alert counts as sent; failures
+  show on the Alerts page and in the backend log.
+
+**Destinations** (add as many as you like, each with its own Test button):
+
+| Type | Notes |
+|---|---|
+| Pushover | App token + user/group key. Separate priorities for warnings and for expired certificates (default: normal and high). |
+| MQTT | `tcp://` or `ssl://` broker. Publishes an event per alert to `<prefix>/alerts`, and retained status for every certificate to `<prefix>/certs/<name>` plus `<prefix>/summary` on every check -- handy for Node-RED, Home Assistant or a status display. |
+| Webhook | Generic JSON (`alerts` array with cn, serial, not_after, days_left, level, expired), ntfy, or Discord. Optional Authorization header. |
+| Email | SMTP with STARTTLS, TLS or none; optional login. Plain-text message. |
+
+**Other settings on the Alerts page:**
+- *step-ui address*: used for the "open step-ui" link in messages.
+- *Time zone*: for dates in messages (e.g. `America/Edmonton`); defaults to
+  the container's, usually UTC.
+- *Trust this CA's root*: lets destinations use certificates issued by
+  your own step-ca (an internal ntfy server, broker or mail server). The
+  root is fetched from `CA_URL` and checked against `CA_ROOT_FINGERPRINT`;
+  it's only trusted if they match.
+
+Admins can change everything; viewers see the page read-only, without
+secret values or delivery details. Changes to the settings and every alert
+sent are recorded in the audit log.
+
+### Settings store and secrets
+
+Settings changed from the web UI (currently the alert settings) are kept
+in step-ui's database, not in environment variables. Secrets in them
+(tokens, passwords, webhook URLs) are encrypted with AES-256-GCM and are
+never sent back to the browser: the page only shows "saved", with Replace
+and Clear buttons.
+
+The encryption key comes from a file:
+- **Default:** `settings.key`, created automatically on first start in the
+  same folder as the database (the `data` volume). Back it up together
+  with the database -- without it, saved secrets can't be decrypted and
+  have to be re-entered (the Alerts page says which).
+- **Docker secret (optional):** set `SETTINGS_KEY_FILE` to the secret's
+  path, e.g. `/run/secrets/step_ui_settings_key`, containing a long random
+  string (`openssl rand -hex 32`). This keeps the key out of the data
+  folder, so a copy of the data folder alone doesn't expose the secrets.
+  Switching from the default key to a secret (or changing the secret) means
+  re-entering saved secrets once.
 
 ## Build Versioning
 
