@@ -11,15 +11,9 @@ package alerts
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/hex"
-	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -27,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"step-ca-webui/internal/catrust"
 	"step-ca-webui/internal/db"
 	"step-ca-webui/internal/settings"
 
@@ -70,8 +65,7 @@ type destState struct {
 type Service struct {
 	db          *gorm.DB
 	store       *settings.Store
-	caURL       string
-	caFP        string
+	trust       *catrust.Fetcher
 	defaultLink string
 	httpTimeout time.Duration
 
@@ -81,21 +75,18 @@ type Service struct {
 	lastCheck  *time.Time
 	lastResult string
 	destStates map[string]*destState
-	rootPEM    []byte
-	rootAt     time.Time
-	rootErr    string
 
 	now func() time.Time // replaceable in tests
 }
 
 // New prepares the feature. defaultLink seeds the "step-ui address" setting
 // the first time (normally CORS_ALLOWED_ORIGIN).
-func New(database *db.Database, store *settings.Store, caURL, caRootFingerprint, defaultLink string) (*Service, error) {
+func New(database *db.Database, store *settings.Store, trust *catrust.Fetcher, defaultLink string) (*Service, error) {
 	if err := database.DB.AutoMigrate(&SentAlert{}); err != nil {
 		return nil, fmt.Errorf("migrating alert history table: %w", err)
 	}
 	s := &Service{
-		db: database.DB, store: store, caURL: strings.TrimRight(caURL, "/"), caFP: caRootFingerprint,
+		db: database.DB, store: store, trust: trust,
 		defaultLink: strings.TrimRight(defaultLink, "/"), httpTimeout: 20 * time.Second,
 		destStates: map[string]*destState{}, now: time.Now,
 	}
@@ -155,77 +146,10 @@ func (s *Service) Start(ctx context.Context) {
 
 // --- TLS trust -------------------------------------------------------------
 
-// caRoot fetches step-ca's root certificate (cached for a day) and checks
-// it against CA_ROOT_FINGERPRINT -- the same trust-on-fingerprint step
-// itself uses. Without a fingerprint configured, nothing is fetched: an
-// unverified root is worse than none.
-func (s *Service) caRoot(ctx context.Context) ([]byte, error) {
-	s.mu.Lock()
-	if s.rootPEM != nil && s.now().Sub(s.rootAt) < 24*time.Hour {
-		defer s.mu.Unlock()
-		return s.rootPEM, nil
-	}
-	s.mu.Unlock()
-
-	if s.caURL == "" || s.caFP == "" {
-		return nil, errors.New("CA_URL and CA_ROOT_FINGERPRINT are needed to trust the CA root")
-	}
-	fp := strings.ToLower(strings.ReplaceAll(s.caFP, ":", ""))
-
-	// The root can't be verified by TLS before we have it -- that's the
-	// point of the fingerprint check below.
-	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // verified by fingerprint below
-	}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.caURL+"/root/"+fp, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching CA root: %w", err)
-	}
-	defer resp.Body.Close()
-	var body struct {
-		CA string `json:"ca"`
-	}
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching CA root: HTTP %d", resp.StatusCode)
-	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return nil, fmt.Errorf("fetching CA root: %w", err)
-	}
-	block, _ := pem.Decode([]byte(body.CA))
-	if block == nil {
-		return nil, errors.New("CA root response contained no certificate")
-	}
-	sum := sha256.Sum256(block.Bytes)
-	if hex.EncodeToString(sum[:]) != fp {
-		return nil, errors.New("CA root fingerprint doesn't match CA_ROOT_FINGERPRINT -- not trusting it")
-	}
-	pemBytes := pem.EncodeToMemory(block)
-
-	s.mu.Lock()
-	s.rootPEM, s.rootAt, s.rootErr = pemBytes, s.now(), ""
-	s.mu.Unlock()
-	return pemBytes, nil
-}
-
 func (s *Service) tlsConfig(ctx context.Context, cfg Config) *tls.Config {
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		pool = x509.NewCertPool()
-	}
-	if cfg.TrustCARoot {
-		if root, err := s.caRoot(ctx); err != nil {
-			s.mu.Lock()
-			s.rootErr = err.Error()
-			s.mu.Unlock()
-			log.Printf("alerts: not trusting step-ca root for destinations: %v", err)
-		} else {
-			pool.AppendCertsFromPEM(root)
-		}
+	pool, warn := s.trust.Pool(ctx, cfg.TrustCARoot, "")
+	if warn != nil {
+		log.Printf("alerts: not trusting step-ca root for destinations: %v", warn)
 	}
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
 }
@@ -585,8 +509,8 @@ func (s *Service) Status(admin bool) (Status, error) {
 
 	s.mu.Lock()
 	st.LastCheck, st.LastResult = s.lastCheck, s.lastResult
-	st.CARootTrusted = s.rootPEM != nil
-	st.CARootError = s.rootErr
+	st.CARootTrusted = s.trust.Trusted()
+	st.CARootError = s.trust.LastError()
 	for _, d := range cfg.Destinations {
 		ds := DestinationStatus{ID: d.ID}
 		if v := s.destStates[d.ID]; v != nil {

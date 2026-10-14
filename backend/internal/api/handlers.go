@@ -20,8 +20,9 @@ import (
 type Handlers struct {
 	db         *db.Database
 	stepClient *step.StepClient
-	// nil unless SSO is configured -- see EnableOIDC in oidc.go.
-	oidc *OIDCAuth
+	// nil if the settings store is unavailable; otherwise holds the live
+	// SSO configuration (which may be "off") -- see sso_settings.go.
+	sso *SSOManager
 }
 
 func NewHandlers(database *db.Database, stepClient *step.StepClient) *Handlers {

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"step-ca-webui/internal/catrust"
 	"step-ca-webui/internal/db"
 	"step-ca-webui/internal/settings"
 )
@@ -39,7 +40,7 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := New(database, store, "", "", "https://step-ui.test")
+	svc, err := New(database, store, catrust.New("", ""), "https://step-ui.test")
 	if err != nil {
 		t.Fatal(err)
 	}

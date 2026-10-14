@@ -73,6 +73,10 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, authToken string, extensions
 				admin.POST("/users", handlers.CreateUser)
 				admin.PUT("/users/:id", handlers.UpdateUser)
 				admin.DELETE("/users/:id", handlers.DeleteUser)
+
+				admin.GET("/settings/sso", handlers.GetSSOSettings)
+				admin.PUT("/settings/sso", handlers.PutSSOSettings)
+				admin.POST("/settings/sso/test", handlers.TestSSOSettings)
 			}
 
 			// Optional feature packages (see RouteExtension).

@@ -21,7 +21,7 @@ unsuitable for production use in a business/enterprise environment.
 - Download certificates in various formats (PEM, PFX)
 - Audit logging
 - User accounts with admin/viewer roles
-- Optional OIDC single sign-on (tested with Authentik), with local login kept as a fallback
+- Optional OIDC single sign-on (tested with Authentik), configured from the web UI, with local login kept as a fallback
 - Expiry alerts by Pushover, MQTT, webhook (JSON, ntfy, Discord) or email, configured from the web UI
 - Modern, responsive UI
 
@@ -164,9 +164,10 @@ shared secret between the frontend and backend, unrelated to user logins.
 
 step-ui can sign people in through any OpenID Connect provider. It's built
 and tested against **Authentik**; Keycloak, Authelia, Zitadel and similar
-should work the same way. SSO is optional and off until configured, and the
-local username/password form always stays on the login page as a
-break-glass path.
+should work the same way. SSO is optional and off until an admin sets it up
+on the **Settings** page, and the local username/password form always
+stays on the login page as a break-glass path. Changes take effect at the
+next sign-in, without a restart.
 
 **How it works:** the login page shows a "Sign in with ..." button. The
 backend runs a standard authorization-code flow with PKCE as a confidential
@@ -178,7 +179,7 @@ password login produces.
   They show in Settings → User Accounts marked **SSO**. They have no
   password in step-ui and can't use the password form.
 - **Roles come from groups**, re-read at every sign-in: membership in
-  `OIDC_ADMIN_GROUP` gives admin, `OIDC_VIEWER_GROUP` gives viewer (admin
+  the *admin group* gives admin, the *viewer group* gives viewer (admin
   wins if both). Anyone in neither group is refused, even if the provider
   let them through. An SSO account's role can't be edited in step-ui --
   change the person's groups at the provider; it applies at their next
@@ -196,7 +197,7 @@ password login produces.
 ### Authentik setup
 
 1. **Groups:** create `stepui-admins` and `stepui-viewers` (any names;
-   they must match the env vars exactly, case included) and add people.
+   they must match what you enter in step-ui exactly, case included) and add people.
 2. **Provider:** Applications → Providers → Create → *OAuth2/OpenID
    Provider*.
    - Authorization flow: `default-provider-authorization-implicit-consent`
@@ -212,32 +213,37 @@ password login produces.
    the provider. Optionally bind `stepui-admins` and `stepui-viewers` on
    its *Policy / Group / User Bindings* tab so Authentik itself refuses
    everyone else before they ever reach step-ui.
-4. **step-ui backend environment:**
-
-```
-OIDC_ISSUER_URL=https://authentik.example.com/application/o/step-ui/
-OIDC_CLIENT_ID=<client id>
-OIDC_CLIENT_SECRET=<client secret>
-OIDC_REDIRECT_URL=https://step-ui-api.example.com:8443/api/auth/oidc/callback
-OIDC_ADMIN_GROUP=stepui-admins
-OIDC_VIEWER_GROUP=stepui-viewers
-OIDC_PROVIDER_NAME=Authentik
-```
+4. **step-ui:** Settings → Single Sign-On (admin only). The blue box at the
+   top shows the redirect URI to register in step 2, with a copy button.
+   Fill in the issuer URL, client ID and secret, redirect URI and the two
+   group names, then **Save** and **Test connection**. When the test
+   passes, switch SSO on and save again.
 
 The issuer URL must match Authentik's exactly, **including the trailing
 slash** (it's shown on the provider's overview page as "OpenID
-Configuration Issuer"). `CORS_ALLOWED_ORIGIN` must be the frontend's real
-browser-facing origin, because that's where the backend sends people after
-signing in (and back to `/login` with an error message if it fails).
-Recreate the backend container; no rebuild needed, and the frontend needs no
-changes.
+Configuration Issuer"); Test connection tells you if it doesn't.
+`CORS_ALLOWED_ORIGIN` must be the frontend's real browser-facing origin,
+because that's where the backend sends people after signing in (and back
+to `/login` with an error message if it fails).
+
+The client secret is stored encrypted (see *Settings store and secrets*
+under Expiry Alerts) and is never shown again; use **Replace** to change
+it. Every change to the SSO settings is recorded in the audit log.
+
+**Upgrading from environment variables:** versions 13 to 17 configured SSO
+with `OIDC_*` environment variables. On the first start of this version,
+a complete set of them is imported into the Settings page automatically
+(including `OIDC_CA_FILE`'s certificate) and SSO keeps working. After that
+they're ignored -- the backend log says so -- and can be removed from your
+compose file or Dockhand stack.
 
 **Network requirements:** the backend container itself talks to the
 provider (discovery, signing keys, code exchange), so it must be able to
 resolve and reach the provider's hostname and trust its certificate. A
 publicly trusted certificate works out of the box. If the provider's
-certificate comes from your own CA (e.g. step-ca), mount that root into the
-backend container and point `OIDC_CA_FILE` at it.
+certificate comes from your own step-ca, tick *Trust this CA's root* under
+Advanced (the root is checked against `CA_ROOT_FINGERPRINT`); for some other
+private CA, paste its certificate there.
 
 **Troubleshooting:** failures land back on the login page with a short
 message; the real reason is in the backend log (lines start with `OIDC:`).
@@ -251,10 +257,10 @@ login is never affected.
 | Not in a group that's allowed | User isn't in either group, or group names differ (case-sensitive). The log lists the groups the provider sent |
 | Identity provider refused the sign-in | Authentik's application binding doesn't include the user |
 | Sign-in could not be verified / expired | Took more than 10 minutes, backend restarted mid-sign-in, or the browser blocked cookies for the backend's hostname |
-| Username matches an existing account | Rename or delete the conflicting local account, or set `OIDC_USERNAME_CLAIM=email` |
+| Username matches an existing account | Rename or delete the conflicting local account, or set the username claim to `email` under Advanced |
 
 Authentik's own errors (e.g. `redirect_uri` mismatch) appear on Authentik's
-page instead: the redirect URI there must equal `OIDC_REDIRECT_URL`
+page instead: the redirect URI there must equal step-ui's *Redirect URI* setting
 character for character (scheme, host, port, no trailing slash).
 ## Expiry Alerts
 
@@ -300,7 +306,7 @@ sent are recorded in the audit log.
 
 ### Settings store and secrets
 
-Settings changed from the web UI (currently the alert settings) are kept
+Settings changed from the web UI (single sign-on and the alert settings) are kept
 in step-ui's database, not in environment variables. Secrets in them
 (tokens, passwords, webhook URLs) are encrypted with AES-256-GCM and are
 never sent back to the browser: the page only shows "saved", with Replace

@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import UserManagement from './user-management'
+import SSOSettingsCard from './sso-settings'
 
 export default function Settings() {
   const { user } = useAuth()
@@ -90,6 +91,9 @@ export default function Settings() {
               every one of these calls for a viewer, so this is purely about
               not showing a section that can't do anything for them) */}
           {user?.role === 'admin' && <UserManagement />}
+
+          {/* Single sign-on settings (admin-only, same reasoning as above) */}
+          {user?.role === 'admin' && <SSOSettingsCard />}
 
           {/* CA Information */}
           <div className="bg-white rounded-lg shadow">

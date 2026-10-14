@@ -9,6 +9,7 @@ import (
 	"step-ca-webui/internal/alerts"
 	"step-ca-webui/internal/api"
 	"step-ca-webui/internal/auth"
+	"step-ca-webui/internal/catrust"
 	"step-ca-webui/internal/config"
 	"step-ca-webui/internal/db"
 	"step-ca-webui/internal/settings"
@@ -76,25 +77,6 @@ func main() {
 	// Initialize handlers
 	handlers := api.NewHandlers(database, stepClient)
 
-	// Optional OIDC single sign-on (e.g. Authentik). A problem here never
-	// stops the backend: local login keeps working regardless.
-	if cfg.OIDCEnabled() {
-		oidcAuth, err := api.NewOIDCAuth(cfg, cfg.CORSAllowedOrigin)
-		if err != nil {
-			log.Printf("WARNING: SSO disabled: %v", err)
-		} else {
-			handlers.EnableOIDC(oidcAuth)
-			log.Printf("SSO enabled: issuer=%s, redirect=%s, admin group=%q, viewer group=%q",
-				cfg.OIDCIssuerURL, cfg.OIDCRedirectURL, cfg.OIDCAdminGroup, cfg.OIDCViewerGroup)
-			if cfg.OIDCAdminGroup == "" && cfg.OIDCViewerGroup == "" {
-				log.Println("WARNING: neither OIDC_ADMIN_GROUP nor OIDC_VIEWER_GROUP is set -- every SSO sign-in will be refused until at least one is.")
-			}
-			go oidcAuth.Probe()
-		}
-	} else if cfg.OIDCIssuerURL != "" || cfg.OIDCClientID != "" {
-		log.Println("WARNING: some OIDC_* settings are set but not all of OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL -- SSO stays off.")
-	}
-
 	if cfg.APIAuthToken == "" {
 		log.Println("WARNING: API_AUTH_TOKEN is not set -- the API is unauthenticated. Anyone who can reach it can issue, sign, and revoke certificates. Set API_AUTH_TOKEN in your .env to require a bearer token.")
 	}
@@ -110,15 +92,25 @@ func main() {
 	// Settings store: runtime configuration edited from the web UI, with
 	// secrets encrypted at rest (see internal/settings).
 	var extensions []api.RouteExtension
+	trust := catrust.New(cfg.CAURL, cfg.CARootFingerprint)
 	store, err := settings.Open(database.DB, cfg.SettingsKeyFile, filepath.Dir(cfg.DBPath))
 	if err != nil {
-		log.Printf("WARNING: settings store unavailable, so features configured from the UI (expiry alerts) are disabled: %v", err)
+		log.Printf("WARNING: settings store unavailable, so settings managed from the UI (single sign-on, expiry alerts) are disabled -- local login still works: %v", err)
 	} else {
 		log.Printf("Settings store ready (encryption key: %s)", store.KeySource())
 
+		// Single sign-on: managed on the Settings page. Older OIDC_*
+		// environment variables are imported once, then ignored.
+		if msg := api.ImportSSOFromEnv(store, cfg); msg != "" {
+			log.Println(msg)
+		}
+		sso := api.NewSSOManager(store, trust, cfg.CORSAllowedOrigin)
+		sso.Reload()
+		handlers.SetSSO(sso)
+
 		// Expiry alerts -- self-contained feature, switched on and
 		// configured from its own page in the UI.
-		if alertSvc, err := alerts.New(database, store, cfg.CAURL, cfg.CARootFingerprint, cfg.CORSAllowedOrigin); err != nil {
+		if alertSvc, err := alerts.New(database, store, trust, cfg.CORSAllowedOrigin); err != nil {
 			log.Printf("WARNING: expiry alerts disabled: %v", err)
 		} else {
 			alertSvc.Start(context.Background())

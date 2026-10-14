@@ -44,11 +44,10 @@ type Config struct {
 	// automatically next to the database. See internal/settings.
 	SettingsKeyFile string
 
-	// OIDC single sign-on (e.g. Authentik). Entirely optional: SSO is
-	// switched on only when OIDCIssuerURL, OIDCClientID, OIDCClientSecret
-	// and OIDCRedirectURL are all set. Local username/password login keeps
-	// working either way, as a break-glass path for when the identity
-	// provider is down. See the "Single sign-on" section of the README.
+	// Legacy OIDC_* settings. SSO is now managed on the Settings page and
+	// stored in the database; these are read only so an existing setup can
+	// be imported once, on the first start of a version with the settings
+	// store (see api.ImportSSOFromEnv). After that they're ignored.
 	OIDCIssuerURL    string
 	OIDCClientID     string
 	OIDCClientSecret string

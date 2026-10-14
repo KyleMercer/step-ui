@@ -73,6 +73,42 @@ export interface AuthConfig {
 // URL for a plain link, not an axios call.
 export const oidcLoginUrl = `${API_URL}/api/auth/oidc/login`
 
+// What to register at the identity provider as the redirect URI: the
+// backend's own callback, at the address the browser uses for the API.
+export const oidcCallbackUrl = `${API_URL}/api/auth/oidc/callback`
+
+export interface SSOSettings {
+  enabled: boolean
+  provider_name: string
+  issuer_url: string
+  client_id: string
+  // Reading: 'set' | 'unset' | 'undecryptable'. Saving: a new secret, or '' to keep the current one.
+  client_secret: string
+  redirect_url: string
+  admin_group: string
+  viewer_group: string
+  groups_claim: string
+  username_claim: string
+  scopes: string
+  trust_ca_root: boolean
+  extra_ca_pem: string
+  active?: boolean
+}
+
+export interface SSOTestResult {
+  message: string
+  authorization_endpoint: string
+  token_endpoint: string
+  warnings: string[] | null
+}
+
+// Admin-only: SSO configuration on the Settings page.
+export const ssoSettingsApi = {
+  get: async (): Promise<SSOSettings> => (await api.get('/api/settings/sso')).data,
+  save: async (s: SSOSettings): Promise<SSOSettings> => (await api.put('/api/settings/sso', s)).data,
+  test: async (): Promise<SSOTestResult> => (await api.post('/api/settings/sso/test')).data,
+}
+
 export interface IssueRequest {
   cn: string
   sans: string[]
